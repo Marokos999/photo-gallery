@@ -8,7 +8,7 @@ internal static class AttributeValueExtensions
     public static AttributeValue ToS(this string value) => new() { S = value };
 
     public static AttributeValue ToN(this int value) => new() { N = value.ToString(CultureInfo.InvariantCulture) };
-
+    public static AttributeValue ToN(this long value) => new() { N = value.ToString(CultureInfo.InvariantCulture) };
     public static AttributeValue ToS(this DateTimeOffset value) =>
         new() { S = value.ToString("O", CultureInfo.InvariantCulture) };
 

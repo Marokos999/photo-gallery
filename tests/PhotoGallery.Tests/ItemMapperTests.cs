@@ -63,4 +63,29 @@ public class ItemMapperTests
         Assert.Equal("ALBUM#a1", item["GSI1PK"].S);
         Assert.Equal("PHOTO#p1", item["GSI1SK"].S);
     }
+    [Fact]
+    public void PendingPhoto_ExpiresAfter24Hours()
+    {
+        var photo = new Photo { UserId = "u1", AlbumId = "a1", PhotoId = "p1", OriginalKey = "k", CreatedAt = Now };
+
+        var item = ItemMapper.ToItem(photo);
+
+        Assert.Equal(Now.AddHours(24).ToUnixTimeSeconds().ToString(), item["ExpiresAt"].N);
+    }
+
+    [Fact]
+    public void ReadyPhoto_HasNoExpiry()
+    {
+        var photo = new Photo
+        {
+            UserId = "u1",
+            AlbumId = "a1",
+            PhotoId = "p1",
+            OriginalKey = "k",
+            Status = PhotoStatus.Ready,
+            CreatedAt = Now
+        };
+
+        Assert.False(ItemMapper.ToItem(photo).ContainsKey("ExpiresAt"));
+    }
 }

@@ -16,11 +16,11 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
     }, ct);
 
     public Task CreatePhotoAsync(Photo photo, CancellationToken ct = default) =>
-        dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
-        {
-            TransactItems =
-            [
-                new TransactWriteItem
+     dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
+     {
+         TransactItems =
+         [
+             new TransactWriteItem
                 {
                     Put = new Put
                     {
@@ -31,17 +31,15 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
                 },
                 new TransactWriteItem
                 {
-                    Update = new Update
+                    ConditionCheck = new ConditionCheck
                     {
                         TableName = _table,
                         Key = Key(Keys.UserPk(photo.UserId), Keys.AlbumSk(photo.AlbumId)),
-                        UpdateExpression = "ADD PhotoCount :one",
-                        ConditionExpression = "attribute_exists(PK)",
-                        ExpressionAttributeValues = new() { [":one"] = 1.ToN() }
+                        ConditionExpression = "attribute_exists(PK)"
                     }
                 }
-            ]
-        }, ct);
+         ]
+     }, ct);
 
     public async Task<Album?> GetAlbumAsync(string userId, string albumId, CancellationToken ct = default)
     {
@@ -67,23 +65,60 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         return items.Select(ItemMapper.ToPhoto).ToList();
     }
 
-    public Task MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default)
-    => dynamoDB.UpdateItemAsync(new UpdateItemRequest
+    public async Task<bool> MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default)
     {
-        TableName = _table,
-        Key = Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photoId)),
-        UpdateExpression = "SET #status = :ready, ThumbnailKey = :thumb, PreviewKey = :preview, Width = :width, Height = :height",
-        ConditionExpression = "attribute_exists(PK)",
-        ExpressionAttributeNames = new() { ["#status"] = "Status" },
-        ExpressionAttributeValues = new()
+        try
         {
-            [":ready"] = nameof(PhotoStatus.Ready).ToS(),
-            [":thumb"] = image.ThumbnailKey.ToS(),
-            [":preview"] = image.PreviewKey.ToS(),
-            [":width"] = image.Width.ToN(),
-            [":height"] = image.Height.ToN()
+            await dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
+            {
+                TransactItems =
+                [
+                    new TransactWriteItem
+                    {
+                        Update = new Update
+                        {
+                            TableName = _table,
+                            Key = Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photoId)),
+                            UpdateExpression =
+                                "SET #status = :ready, ThumbnailKey = :thumb, PreviewKey = :preview, Width = :width, Height = :height REMOVE ExpiresAt",
+                            ConditionExpression = "#status = :pending",
+                            ExpressionAttributeNames = new() { ["#status"] = "Status" },
+                            ExpressionAttributeValues = new()
+                            {
+                                [":ready"] = nameof(PhotoStatus.Ready).ToS(),
+                                [":pending"] = nameof(PhotoStatus.Pending).ToS(),
+                                [":thumb"] = image.ThumbnailKey.ToS(),
+                                [":preview"] = image.PreviewKey.ToS(),
+                                [":width"] = image.Width.ToN(),
+                                [":height"] = image.Height.ToN()
+                            }
+                        }
+                    },
+                    new TransactWriteItem
+                    {
+                        Update = new Update
+                        {
+                            TableName = _table,
+                            Key = Key(Keys.UserPk(userId), Keys.AlbumSk(albumId)),
+                            UpdateExpression = "ADD PhotoCount :one SET CoverPhotoKey = if_not_exists(CoverPhotoKey, :thumb)",
+                            ConditionExpression = "attribute_exists(PK)",
+                            ExpressionAttributeValues = new()
+                            {
+                                [":one"] = 1.ToN(),
+                                [":thumb"] = image.ThumbnailKey.ToS()
+                            }
+                        }
+                    }
+                ]
+            }, ct);
+
+            return true;
         }
-    }, ct);
+        catch (TransactionCanceledException)
+        {
+            return false;
+        }
+    }
 
 
 

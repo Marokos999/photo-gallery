@@ -30,7 +30,7 @@ public class DynamoGalleryRepositoryTests
     }
 
     [Fact]
-    public async Task CreatePhoto_IncrementsAlbumCount_AndIsListedInAlbum()
+    public async Task CreatePhoto_IsListedInAlbum_ButNotCountedUntilReady()
     {
         Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
         var album = NewAlbum("Trip");
@@ -40,7 +40,7 @@ public class DynamoGalleryRepositoryTests
         await _repository.CreatePhotoAsync(NewPhoto(album.AlbumId), Ct);
 
         var stored = await _repository.GetAlbumAsync(_userId, album.AlbumId, Ct);
-        Assert.Equal(2, stored!.PhotoCount);
+        Assert.Equal(0, stored!.PhotoCount);
         Assert.Equal(2, (await _repository.ListPhotosAsync(_userId, album.AlbumId, Ct)).Count);
         Assert.Empty(await _repository.ListAlbumsAsync(Keys.NewId(), Ct));
     }
@@ -55,21 +55,28 @@ public class DynamoGalleryRepositoryTests
     }
 
     [Fact]
-    public async Task MarkPhotoReady_UpdatesStatusAndKeys()
+    public async Task MarkPhotoReady_IsIdempotent_AndCountsOnce()
     {
         Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
         var album = NewAlbum("Ready");
         await _repository.CreateAlbumAsync(album, Ct);
         var photo = NewPhoto(album.AlbumId);
         await _repository.CreatePhotoAsync(photo, Ct);
-
         var image = new ProcessedImage(S3Keys.Thumbnail(photo.PhotoId), S3Keys.Preview(photo.PhotoId), 4000, 3000);
-        await _repository.MarkPhotoReadyAsync(_userId, album.AlbumId, photo.PhotoId, image, Ct);
 
-        var stored = await _repository.GetPhotoAsync(_userId, album.AlbumId, photo.PhotoId, Ct);
-        Assert.Equal(PhotoStatus.Ready, stored!.Status);
-        Assert.Equal(image.ThumbnailKey, stored.ThumbnailKey);
-        Assert.Equal(4000, stored.Width);
+        var first = await _repository.MarkPhotoReadyAsync(_userId, album.AlbumId, photo.PhotoId, image, Ct);
+        var second = await _repository.MarkPhotoReadyAsync(_userId, album.AlbumId, photo.PhotoId, image, Ct);
+
+        Assert.True(first);
+        Assert.False(second);
+
+        var storedPhoto = await _repository.GetPhotoAsync(_userId, album.AlbumId, photo.PhotoId, Ct);
+        Assert.Equal(PhotoStatus.Ready, storedPhoto!.Status);
+        Assert.Equal(4000, storedPhoto.Width);
+
+        var storedAlbum = await _repository.GetAlbumAsync(_userId, album.AlbumId, Ct);
+        Assert.Equal(1, storedAlbum!.PhotoCount);
+        Assert.Equal(image.ThumbnailKey, storedAlbum.CoverPhotoKey);
     }
 
     private Album NewAlbum(string name) => new()

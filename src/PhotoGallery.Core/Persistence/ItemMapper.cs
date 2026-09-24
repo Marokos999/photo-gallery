@@ -8,7 +8,7 @@ public static class ItemMapper
     public const string AlbumType = "Album";
     public const string PhotoType = "Photo";
     public const string AlbumGsiSk = "ALBUM";
-
+    public static readonly TimeSpan PendingTtl = TimeSpan.FromHours(24);
     public static Dictionary<string, AttributeValue> ToItem(Album album)
     {
         var item = new Dictionary<string, AttributeValue>
@@ -64,6 +64,9 @@ public static class ItemMapper
         if (photo.Caption is not null) item["Caption"] = photo.Caption.ToS();
         if (photo.Width is { } width) item["Width"] = width.ToN();
         if (photo.Height is { } height) item["Height"] = height.ToN();
+
+        if (photo.Status == PhotoStatus.Pending)
+            item["ExpiresAt"] = photo.CreatedAt.Add(PendingTtl).ToUnixTimeSeconds().ToN();
 
         return item;
     }

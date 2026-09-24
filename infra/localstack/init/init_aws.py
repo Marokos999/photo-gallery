@@ -72,6 +72,10 @@ def create_table() -> None:
             ],
         )
         print(f"table {TABLE} created")
+        dynamodb.update_time_to_live(
+            TableName=TABLE,
+            TimeToLiveSpecification={"Enabled": True, "AttributeName": "ExpiresAt"},
+        )
     except ClientError as e:
         if e.response["Error"]["Code"] != "ResourceInUseException":
             raise

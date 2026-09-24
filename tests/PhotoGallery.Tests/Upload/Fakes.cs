@@ -34,8 +34,8 @@ internal sealed class FakeGalleryRepository : IGalleryRepository
     public Task<IReadOnlyList<Photo>> ListPhotosAsync(string userId, string albumId, CancellationToken ct = default) =>
         throw new NotImplementedException();
 
-    public Task MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default) =>
-        throw new NotImplementedException();
+    public Task<bool> MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default) =>
+    throw new NotImplementedException();
 }
 
 internal sealed class FakeUrlSigner : IUrlSigner

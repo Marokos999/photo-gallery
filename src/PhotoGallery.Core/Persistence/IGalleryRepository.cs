@@ -11,5 +11,6 @@ public interface IGalleryRepository
     Task CreatePhotoAsync(Photo photo, CancellationToken ct = default);
     Task<Photo?> GetPhotoAsync(string userId, string albumId, string photoId, CancellationToken ct = default);
     Task<IReadOnlyList<Photo>> ListPhotosAsync(string userId, string albumId, CancellationToken ct = default);
-    Task MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default);
+    Task<bool> MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default);
+
 }
