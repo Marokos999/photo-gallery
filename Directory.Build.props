@@ -5,4 +5,9 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <!-- Local dev: sixlabors.lic in repo root (gitignored). CI: SixLaborsLicenseKey env var. -->
+  <PropertyGroup Condition="'$(SixLaborsLicenseKey)' == '' and Exists('$(MSBuildThisFileDirectory)sixlabors.lic')">
+    <SixLaborsLicenseFile>$(MSBuildThisFileDirectory)sixlabors.lic</SixLaborsLicenseFile>
+  </PropertyGroup>
 </Project>

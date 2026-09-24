@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Photo Gallery - serverless photo upload, processing and albums
+
+Globals:
+  Function:
+    Runtime: dotnet10
+    Architectures: [arm64]
+    MemorySize: 1024
+    Timeout: 30
+    LoggingConfig:
+      LogFormat: JSON
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref PhotoTable
+        BUCKET_NAME: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
+        LOCALSTACK_ENDPOINT: ""
+
+Resources:
+  PhotoBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["http://localhost:3000"]
+            AllowedMethods: [PUT, GET]
+            AllowedHeaders: ["*"]
+            ExposedHeaders: [ETag]
+            MaxAge: 3000
+
+  PhotoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-PhotoGallery"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+        - { AttributeName: GSI1PK, AttributeType: S }
+        - { AttributeName: GSI1SK, AttributeType: S }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - { AttributeName: GSI1PK, KeyType: HASH }
+            - { AttributeName: GSI1SK, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ["http://localhost:3000"]
+        AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
+        AllowHeaders: ["*"]
+
+  UploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/PhotoGallery.Upload/
+      Handler: PhotoGallery.Upload::PhotoGallery.Upload.UploadFunction::HandleAsync
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhotoTable
+        - S3WritePolicy:
+            BucketName: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
+      Events:
+        GetUploadUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/photos/upload-url
+            Method: POST
+
+  ProcessingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/PhotoGallery.Processing/
+      Handler: PhotoGallery.Processing::PhotoGallery.Processing.ProcessingFunction::HandleAsync
+      MemorySize: 2048
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhotoTable
+        - S3CrudPolicy:
+            BucketName: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
+      Events:
+        OriginalUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref PhotoBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - { Name: prefix, Value: originals/ }
+
+  PhotosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/PhotoGallery.Photos/
+      Handler: PhotoGallery.Photos
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PhotoTable
+        - S3CrudPolicy:
+            BucketName: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  BucketName:
+    Value: !Ref PhotoBucket
+  TableName:
+    Value: !Ref PhotoTable

@@ -1,0 +1,6 @@
+{
+  "configuration": "Release",
+  "framework": "net10.0",
+  "function-runtime": "dotnet10",
+  "function-architecture": "arm64"
+}
