@@ -15,6 +15,7 @@ Globals:
         TABLE_NAME: !Ref PhotoTable
         BUCKET_NAME: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
         LOCALSTACK_ENDPOINT: ""
+        S3_PUBLIC_ENDPOINT: ""
 
 Resources:
   PhotoBucket:

@@ -4,14 +4,14 @@ using Amazon.S3;
 
 namespace PhotoGallery.Core;
 
-public sealed class AwsClientFactory
+public static class AwsClientFactory
 {
-  private static readonly AWSCredentials LocalCredentials  = new BasicAWSCredentials("test", "test");
+    private static readonly AWSCredentials LocalCredentials = new BasicAWSCredentials("test", "test");
 
-  private static string LocalRegion => Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-central-1";
+    private static string LocalRegion =>
+        Environment.GetEnvironmentVariable("AWS_REGION") ?? "eu-central-1";
 
-
-  public static IAmazonDynamoDB CreateDynamoDb(GalleryOptions options)
+    public static IAmazonDynamoDB CreateDynamoDb(GalleryOptions options)
     {
         if (!options.UseLocalStack)
             return new AmazonDynamoDBClient();
@@ -24,17 +24,20 @@ public sealed class AwsClientFactory
         return new AmazonDynamoDBClient(LocalCredentials, config);
     }
 
-  public static IAmazonS3 CreateS3(GalleryOptions options)
-  {
-    if(!options.UseLocalStack) return new AmazonS3Client();
+    public static IAmazonS3 CreateS3(GalleryOptions options) =>
+        options.UseLocalStack ? CreateLocalS3(options.LocalStackEndpoint!) : new AmazonS3Client();
 
-    var config = new AmazonS3Config
+    public static IAmazonS3 CreateS3Presigner(GalleryOptions options) =>
+        options.UseLocalStack ? CreateLocalS3(options.PresignEndpoint!) : new AmazonS3Client();
+
+    private static AmazonS3Client CreateLocalS3(string endpoint)
     {
-    ServiceURL = options.LocalStackEndpoint,
-    AuthenticationRegion = LocalRegion,
-    ForcePathStyle = true
-    };
-
-    return new AmazonS3Client(LocalCredentials, config);
-  }
+        var config = new AmazonS3Config
+        {
+            ServiceURL = endpoint,
+            AuthenticationRegion = LocalRegion,
+            ForcePathStyle = true
+        };
+        return new AmazonS3Client(LocalCredentials, config);
+    }
 }
