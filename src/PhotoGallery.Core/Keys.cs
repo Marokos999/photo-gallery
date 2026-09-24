@@ -17,5 +17,7 @@ public static class Keys
 
     public static string PhotoGsiSk(string photoId) => $"{PhotoSkPrefix}{photoId}";
 
-    public static string NewId() => Guid.CreateVersion7().ToString("N");
+    public static string NewId() => NewId(DateTimeOffset.UtcNow);
+
+    public static string NewId(DateTimeOffset timestamp) => Guid.CreateVersion7(timestamp).ToString("N");
 }

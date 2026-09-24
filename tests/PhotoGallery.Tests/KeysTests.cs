@@ -19,8 +19,9 @@ public class KeysTests
     [Fact]
     public void NewId_IsSortableByCreationTime()
     {
-        var first = Keys.NewId();
-        var second = Keys.NewId();
+        var now = DateTimeOffset.UtcNow;
+        var first = Keys.NewId(now);
+        var second = Keys.NewId(now.AddMilliseconds(1));
 
         Assert.True(string.CompareOrdinal(first, second) < 0);
     }
