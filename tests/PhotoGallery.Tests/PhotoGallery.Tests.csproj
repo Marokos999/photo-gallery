@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.TestUtilities" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
@@ -18,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PhotoGallery.Core\PhotoGallery.Core.csproj" />
+    <ProjectReference Include="..\..\src\PhotoGallery.Upload\PhotoGallery.Upload.csproj" />
   </ItemGroup>
 
 </Project>
