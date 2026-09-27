@@ -1,10 +1,9 @@
-using System.Text.RegularExpressions;
 using Amazon.Lambda.APIGatewayEvents;
 using PhotoGallery.Core;
 
 namespace PhotoGallery.Upload;
 
-public static partial class UserResolver
+public static class UserResolver
 {
     public const string DebugUserHeader = "x-debug-user-id";
 
@@ -25,8 +24,5 @@ public static partial class UserResolver
     }
 
     private static string? Validated(string? userId) =>
-        userId is not null && UserIdFormat().IsMatch(userId) ? userId : null;
-
-    [GeneratedRegex("^[A-Za-z0-9-]{1,64}$")]
-    private static partial Regex UserIdFormat();
+        IdFormats.IsUserId(userId) ? userId : null;
 }

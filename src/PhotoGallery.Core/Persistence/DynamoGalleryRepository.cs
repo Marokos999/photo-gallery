@@ -169,6 +169,31 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         ["SK"] = sk.ToS()
     };
 
+    public async Task<bool> MarkPhotoFailedAsync(string userId, string albumId, string photoId, CancellationToken ct = default)
+    {
+        try
+        {
+            await dynamoDB.UpdateItemAsync(new UpdateItemRequest
+            {
+                TableName = _table,
+                Key = Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photoId)),
+                UpdateExpression = "SET #status = :failed REMOVE ExpiresAt",
+                ConditionExpression = "#status = :pending",
+                ExpressionAttributeNames = new() { ["#status"] = "Status" },
+                ExpressionAttributeValues = new()
+                {
+                    [":failed"] = nameof(PhotoStatus.Failed).ToS(),
+                    [":pending"] = nameof(PhotoStatus.Pending).ToS()
+                }
+            }, ct);
+            return true;
+        }
+        catch (ConditionalCheckFailedException)
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> DeletePhotoAsync(Photo photo, CancellationToken ct = default)
     {
         List<TransactWriteItem> items =

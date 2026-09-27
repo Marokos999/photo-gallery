@@ -44,7 +44,9 @@ export function UploadDropzone({ albumId, caption, tags }: UploadDropzoneProps) 
       await queryClient.invalidateQueries({ queryKey: ["photos", albumId] });
     } catch (error) {
       const message =
-        error instanceof ApiError && error.status === 400 ? "Rejected by the server (check caption and tags)." : "Upload failed.";
+        error instanceof ApiError && error.status === 400
+          ? "Rejected by the server (check caption and tags)."
+          : "Upload failed.";
       update(id, { status: "error", error: message });
     }
   }
@@ -93,7 +95,11 @@ export function UploadDropzone({ albumId, caption, tags }: UploadDropzoneProps) 
                 <span className="truncate">{item.name}</span>
                 <span
                   className={
-                    item.status === "error" ? "text-red-600" : item.status === "done" ? "text-green-700" : "text-neutral-500"
+                    item.status === "error"
+                      ? "text-red-600"
+                      : item.status === "done"
+                        ? "text-green-700"
+                        : "text-neutral-500"
                   }
                 >
                   {item.status === "uploading" && `${Math.round(item.progress * 100)}%`}

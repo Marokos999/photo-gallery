@@ -6,7 +6,11 @@ import { CreateAlbumForm } from "@/components/CreateAlbumForm";
 import { api } from "@/lib/api";
 
 export default function AlbumsPage() {
-  const { data: albums, isPending, isError } = useQuery({
+  const {
+    data: albums,
+    isPending,
+    isError,
+  } = useQuery({
     queryKey: ["albums"],
     queryFn: api.listAlbums,
     // Photo counts and covers change in the background (processing), so always refetch on visit.

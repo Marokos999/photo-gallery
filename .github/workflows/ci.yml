@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (.NET 10)
+    runs-on: ubuntu-latest
+    env:
+      # Optional secrets. Without LOCALSTACK_AUTH_TOKEN the integration tests are skipped (not failed);
+      # without SIXLABORS_LICENSE_KEY the Debug build only warns about the ImageSharp license.
+      LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+      SixLaborsLicenseKey: ${{ secrets.SIXLABORS_LICENSE_KEY }}
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Start LocalStack
+        if: env.LOCALSTACK_AUTH_TOKEN != ''
+        run: |
+          docker compose up -d
+          timeout 180 bash -c 'until docker compose logs localstack | grep -q "photo-gallery init done"; do sleep 3; done'
+
+      - name: Restore
+        run: dotnet restore PhotoGallery.slnx
+
+      - name: Build
+        run: dotnet build PhotoGallery.slnx --no-restore
+
+      - name: Test
+        run: dotnet test --no-build
+
+  frontend:
+    name: Frontend (Next.js 16)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: https://api.example.com
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npx tsc --noEmit
+      - run: npm run build

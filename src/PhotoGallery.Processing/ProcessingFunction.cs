@@ -58,11 +58,6 @@ public sealed class ProcessingFunction
             return;
         }
 
-        if (s3Object.Size > MaxOriginalBytes)
-        {
-            logger.LogWarning("Photo {PhotoId} is too large ({Size} bytes)", parts.PhotoId, s3Object.Size);
-            return;
-        }
         var existing = await repo.GetPhotoAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
         if (existing is not { Status: PhotoStatus.Pending })
         {
@@ -70,6 +65,12 @@ public sealed class ProcessingFunction
             return;
         }
 
+        if (s3Object.Size > MaxOriginalBytes)
+        {
+            logger.LogWarning("Photo {PhotoId} is too large ({Size} bytes)", parts.PhotoId, s3Object.Size);
+            await repo.MarkPhotoFailedAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
+            return;
+        }
 
         ProcessedVariants variants;
 
@@ -80,7 +81,9 @@ public sealed class ProcessingFunction
         }
         catch (ImageFormatException ex)
         {
+            // Not retryable: the same bytes will fail again. Record it so the UI stops waiting.
             logger.LogError(ex, "Photo {PhotoId} is not a supported image", parts.PhotoId);
+            await repo.MarkPhotoFailedAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
             return;
         }
 

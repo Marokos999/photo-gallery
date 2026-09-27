@@ -19,7 +19,9 @@ export default function UploadPage() {
     <section className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Upload photos</h1>
-        <p className="text-sm text-neutral-500">Caption and tags apply to every photo in this batch. You can edit them later.</p>
+        <p className="text-sm text-neutral-500">
+          Caption and tags apply to every photo in this batch. You can edit them later.
+        </p>
       </div>
 
       {albums.isPending && <p className="text-neutral-500">Loading albums…</p>}

@@ -35,7 +35,11 @@ internal sealed class FakeGalleryRepository : IGalleryRepository
         throw new NotImplementedException();
 
     public Task<bool> MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default) =>
-    throw new NotImplementedException();
+        throw new NotImplementedException();
+
+    public Task<bool> MarkPhotoFailedAsync(string userId, string albumId, string photoId, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
     public Task<bool> DeletePhotoAsync(Photo photo, CancellationToken ct = default) => throw new NotImplementedException();
 
     public Task SetAlbumCoverAsync(string userId, string albumId, string? coverPhotoKey, CancellationToken ct = default) =>

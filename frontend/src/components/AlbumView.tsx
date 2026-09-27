@@ -44,8 +44,7 @@ export function AlbumView() {
   if (album.isError) return <p className="text-red-600">Could not load the album.</p>;
 
   // Derived from the (polled) photo list so the count updates as soon as processing finishes.
-  const readyPhotoCount =
-    photos.data?.filter((photo) => photo.status === "Ready").length ?? album.data.photoCount;
+  const readyPhotoCount = photos.data?.filter((photo) => photo.status === "Ready").length ?? album.data.photoCount;
 
   return (
     <section className="space-y-6">

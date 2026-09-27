@@ -69,6 +69,33 @@ public class ProcessingFunctionTests
         Assert.Equal(1, album!.PhotoCount);
     }
 
+    [Fact]
+    public async Task Handle_WithNonImageFile_MarksPhotoFailed()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var repository = new DynamoGalleryRepository(AwsClientFactory.CreateDynamoDb(Options), Options);
+        var s3 = AwsClientFactory.CreateS3(Options);
+        var userId = Keys.NewId();
+        var albumId = Keys.NewId();
+        var photoId = Keys.NewId();
+        var originalKey = S3Keys.Original(userId, albumId, photoId, "not-an-image.jpg");
+
+        await repository.CreateAlbumAsync(
+            new Album { UserId = userId, AlbumId = albumId, Name = "Broken", CreatedAt = DateTimeOffset.UtcNow }, Ct);
+        await repository.CreatePhotoAsync(
+            new Photo { UserId = userId, AlbumId = albumId, PhotoId = photoId, OriginalKey = originalKey, CreatedAt = DateTimeOffset.UtcNow },
+            Ct);
+        await s3.PutObjectAsync(
+            new PutObjectRequest { BucketName = Options.BucketName, Key = originalKey, ContentBody = "definitely not a jpeg" }, Ct);
+
+        var function = new ProcessingFunction(repository, s3, new ImageProcessor(), Options);
+        await function.HandleAsync(S3EventFor(originalKey, 21), new TestLambdaContext());
+
+        var photo = await repository.GetPhotoAsync(userId, albumId, photoId, Ct);
+        Assert.Equal(PhotoStatus.Failed, photo!.Status);
+        Assert.Equal(0, (await repository.GetAlbumAsync(userId, albumId, Ct))!.PhotoCount);
+    }
+
     private static S3Event S3EventFor(string key, long size) => new()
     {
         Records =

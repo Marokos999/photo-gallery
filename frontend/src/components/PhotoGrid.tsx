@@ -83,7 +83,12 @@ function PhotoTile({ photo, deleting, onOpen, onEdit, onDelete }: PhotoTileProps
       {isReady ? (
         <button type="button" onClick={onOpen} className="block h-full w-full cursor-zoom-in">
           {/* eslint-disable-next-line @next/next/no-img-element -- static export: next/image optimization is unavailable */}
-          <img src={photo.thumbnailUrl!} alt={photo.caption ?? ""} loading="lazy" className="h-full w-full object-cover" />
+          <img
+            src={photo.thumbnailUrl!}
+            alt={photo.caption ?? ""}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
         </button>
       ) : (
         <div className="flex h-full items-center justify-center text-sm text-neutral-500">

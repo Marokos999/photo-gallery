@@ -58,7 +58,12 @@ export function SharedAlbumView() {
                 style={{ aspectRatio: tileAspectRatio(photo.width, photo.height) }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element -- static export: next/image optimization is unavailable */}
-                <img src={photo.thumbnailUrl ?? ""} alt={photo.caption ?? ""} loading="lazy" className="h-full w-full object-cover" />
+                <img
+                  src={photo.thumbnailUrl ?? ""}
+                  alt={photo.caption ?? ""}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
               </button>
               {photo.caption && <p className="mt-1 text-sm text-neutral-600">{photo.caption}</p>}
             </li>

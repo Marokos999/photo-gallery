@@ -65,6 +65,15 @@ internal sealed class InMemoryGalleryRepository : IGalleryRepository
         return Task.FromResult(true);
     }
 
+    public Task<bool> MarkPhotoFailedAsync(string userId, string albumId, string photoId, CancellationToken ct = default)
+    {
+        if (_photos.GetValueOrDefault((userId, albumId, photoId)) is not { Status: PhotoStatus.Pending } photo)
+            return Task.FromResult(false);
+
+        _photos[(userId, albumId, photoId)] = photo with { Status = PhotoStatus.Failed };
+        return Task.FromResult(true);
+    }
+
     public Task<bool> DeletePhotoAsync(Photo photo, CancellationToken ct = default)
     {
         var key = (photo.UserId, photo.AlbumId, photo.PhotoId);
