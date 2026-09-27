@@ -63,6 +63,13 @@ public sealed class ProcessingFunction
             logger.LogWarning("Photo {PhotoId} is too large ({Size} bytes)", parts.PhotoId, s3Object.Size);
             return;
         }
+        var existing = await repo.GetPhotoAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
+        if (existing is not { Status: PhotoStatus.Pending })
+        {
+            logger.LogInformation("Photo {PhotoId} is not pending, skipping", parts.PhotoId);
+            return;
+        }
+
 
         ProcessedVariants variants;
 
