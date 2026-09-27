@@ -25,7 +25,14 @@ public static class ResponseMapping
               photo.CreatedAt,
               await SignOrNullAsync(signer, photo.ThumbnailKey, expiresAt),
               await SignOrNullAsync(signer, photo.PreviewKey, expiresAt));
-
+    public static async Task<SharedPhotoResponse> ToSharedResponseAsync(this Photo photo, IUrlSigner signer, DateTimeOffset expiresAt) =>
+        new(
+            photo.PhotoId,
+            photo.Caption,
+            photo.Width,
+            photo.Height,
+            await SignOrNullAsync(signer, photo.ThumbnailKey, expiresAt),
+            await SignOrNullAsync(signer, photo.PreviewKey, expiresAt));
     private static async Task<string?> SignOrNullAsync(IUrlSigner signer, string? key, DateTimeOffset expireAt)
     => key is null ? null : await signer.CreateDownloadUrlAsync(key, expireAt);
 

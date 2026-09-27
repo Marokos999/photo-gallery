@@ -5,6 +5,8 @@ using PhotoGallery.Core.Persistence;
 using PhotoGallery.Core.Storage;
 using PhotoGallery.Photos.Albums;
 using PhotoGallery.Photos.Auth;
+using PhotoGallery.Photos.Photos;
+using PhotoGallery.Photos.Shares;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +23,8 @@ builder.Services.AddSingleton<IUrlSigner>(sp =>
     var options = sp.GetRequiredService<GalleryOptions>();
     return new S3UrlSigner(AwsClientFactory.CreateS3Presigner(options), options);
 });
+builder.Services.AddSingleton(sp => AwsClientFactory.CreateS3(sp.GetRequiredService<GalleryOptions>()));
+builder.Services.AddSingleton<IPhotoStorage, S3PhotoStorage>();
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddAuthentication(GalleryAuthenticationHandler.SchemeName)
@@ -37,6 +41,8 @@ app.UseAuthorization();
 var api = app.MapGroup("/api").RequireAuthorization();
 api.MapGet("/health", () => TypedResults.Ok(new { status = "ok" })).AllowAnonymous();
 api.MapAlbumEndpoints();
+api.MapPhotoEndpoints();
+api.MapShareEndpoints();
 
 app.Run();
 

@@ -13,6 +13,7 @@ namespace PhotoGallery.Tests.Photos;
 public sealed class PhotosApiFactory : WebApplicationFactory<Program>
 {
     internal InMemoryGalleryRepository Repository { get; } = new();
+    internal FakePhotoStorage Storage { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.ConfigureTestServices(services =>
@@ -20,6 +21,7 @@ public sealed class PhotosApiFactory : WebApplicationFactory<Program>
             services.AddSingleton(new GalleryOptions("table", "bucket", "http://localstack:4566"));
             services.AddSingleton<IGalleryRepository>(Repository);
             services.AddSingleton<IUrlSigner, FakeUrlSigner>();
+            services.AddSingleton<IPhotoStorage>(Storage);
         });
 
     public HttpClient CreateClientFor(string userId)
@@ -28,4 +30,5 @@ public sealed class PhotosApiFactory : WebApplicationFactory<Program>
         client.DefaultRequestHeaders.Add(GalleryAuthenticationHandler.DebugUserHeader, userId);
         return client;
     }
+
 }

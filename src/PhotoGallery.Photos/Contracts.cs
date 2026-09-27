@@ -21,3 +21,19 @@ public sealed record PhotoResponse(
     DateTimeOffset CreatedAt,
     string? ThumbnailUrl,
     string? PreviewUrl);
+public sealed record CreateShareRequest(int? ExpiresInDays);
+
+public sealed record ShareResponse(string Code, DateTimeOffset ExpiresAt);
+
+public sealed record SharedAlbumResponse(
+    string Name,
+    DateTimeOffset? ExpiresAt,
+    IReadOnlyList<SharedPhotoResponse> Photos);
+
+public sealed record SharedPhotoResponse(
+    string PhotoId,
+    string? Caption,
+    int? Width,
+    int? Height,
+    string? ThumbnailUrl,
+    string? PreviewUrl);
