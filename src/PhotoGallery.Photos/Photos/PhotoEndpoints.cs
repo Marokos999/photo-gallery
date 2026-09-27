@@ -10,10 +10,45 @@ namespace PhotoGallery.Photos.Photos;
 
 public static class PhotoEndpoints
 {
+    private const int MaxCaptionLength = 500;
+    private const int MaxTags = 20;
+    private const int MaxTagLength = 50;
+
     public static RouteGroupBuilder MapPhotoEndpoints(this RouteGroupBuilder api)
     {
         api.MapDelete("/albums/{albumId}/photos/{photoId}", DeletePhoto);
+        api.MapPatch("/albums/{albumId}/photos/{photoId}", UpdatePhoto);
         return api;
+    }
+
+    private static async Task<Results<NoContent, NotFound, ValidationProblem>> UpdatePhoto(
+        string albumId,
+        string photoId,
+        UpdatePhotoRequest request,
+        ClaimsPrincipal user,
+        IGalleryRepository repository,
+        CancellationToken ct)
+    {
+        var caption = string.IsNullOrWhiteSpace(request.Caption) ? null : request.Caption.Trim();
+        var tags = (request.Tags ?? [])
+            .Select(tag => tag.Trim())
+            .Where(tag => tag.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var errors = new Dictionary<string, string[]>();
+        if (caption is { Length: > MaxCaptionLength })
+            errors["caption"] = [$"Caption must be at most {MaxCaptionLength} characters."];
+        if (tags.Count > MaxTags || tags.Any(tag => tag.Length > MaxTagLength))
+            errors["tags"] = [$"At most {MaxTags} tags, each up to {MaxTagLength} characters."];
+        if (errors.Count > 0)
+            return TypedResults.ValidationProblem(errors);
+
+        if (!IdFormats.IsEntityId(albumId) || !IdFormats.IsEntityId(photoId))
+            return TypedResults.NotFound();
+
+        var updated = await repository.UpdatePhotoDetailsAsync(user.GetUserId(), albumId, photoId, caption, tags, ct);
+        return updated ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
     private static async Task<Results<NoContent, NotFound, Conflict>> DeletePhoto(

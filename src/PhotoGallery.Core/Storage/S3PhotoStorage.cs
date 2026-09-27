@@ -5,16 +5,18 @@ namespace PhotoGallery.Core.Storage;
 
 public sealed class S3PhotoStorage(IAmazonS3 s3, GalleryOptions options) : IPhotoStorage
 {
+    private const int DeleteObjectsLimit = 1000;
+
     public async Task DeleteAsync(IReadOnlyCollection<string> keys, CancellationToken ct = default)
     {
-        if (keys.Count == 0)
-            return;
-
-        await s3.DeleteObjectsAsync(new DeleteObjectsRequest
+        foreach (var chunk in keys.Chunk(DeleteObjectsLimit))
         {
-            BucketName = options.BucketName,
-            Objects = keys.Select(key => new KeyVersion { Key = key }).ToList(),
-            Quiet = true
-        }, ct);
+            await s3.DeleteObjectsAsync(new DeleteObjectsRequest
+            {
+                BucketName = options.BucketName,
+                Objects = chunk.Select(key => new KeyVersion { Key = key }).ToList(),
+                Quiet = true
+            }, ct);
+        }
     }
 }

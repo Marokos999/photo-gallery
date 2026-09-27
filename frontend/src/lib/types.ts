@@ -54,3 +54,7 @@ export interface UploadTicket {
   uploadUrl: string;
   expiresAt: string;
 }
+export interface PhotoDetails {
+  caption: string | null;
+  tags: string[];
+}

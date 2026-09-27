@@ -37,3 +37,6 @@ public sealed record SharedPhotoResponse(
     int? Height,
     string? ThumbnailUrl,
     string? PreviewUrl);
+public sealed record RenameAlbumRequest(string? Name);
+
+public sealed record UpdatePhotoRequest(string? Caption, IReadOnlyList<string>? Tags);

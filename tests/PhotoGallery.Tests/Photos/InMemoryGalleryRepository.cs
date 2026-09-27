@@ -100,4 +100,35 @@ internal sealed class InMemoryGalleryRepository : IGalleryRepository
 
     public Task<Share?> GetShareAsync(string code, CancellationToken ct = default) =>
         Task.FromResult(_shares.GetValueOrDefault(code));
+
+    public Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default)
+    {
+        if (!_albums.TryGetValue((userId, albumId), out var album))
+            return Task.FromResult(false);
+
+        _albums[(userId, albumId)] = album with { Name = name };
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<Photo>?> DeleteAlbumAsync(string userId, string albumId, CancellationToken ct = default)
+    {
+        if (!_albums.TryRemove((userId, albumId), out _))
+            return Task.FromResult<IReadOnlyList<Photo>?>(null);
+
+        var photos = _photos.Values.Where(p => p.UserId == userId && p.AlbumId == albumId).ToList();
+        foreach (var photo in photos)
+            _photos.TryRemove((userId, albumId, photo.PhotoId), out _);
+
+        return Task.FromResult<IReadOnlyList<Photo>?>(photos);
+    }
+
+    public Task<bool> UpdatePhotoDetailsAsync(
+        string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default)
+    {
+        if (!_photos.TryGetValue((userId, albumId, photoId), out var photo))
+            return Task.FromResult(false);
+
+        _photos[(userId, albumId, photoId)] = photo with { Caption = caption, Tags = tags };
+        return Task.FromResult(true);
+    }
 }

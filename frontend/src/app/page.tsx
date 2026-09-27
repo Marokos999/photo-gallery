@@ -6,7 +6,12 @@ import { CreateAlbumForm } from "@/components/CreateAlbumForm";
 import { api } from "@/lib/api";
 
 export default function AlbumsPage() {
-  const { data: albums, isPending, isError } = useQuery({ queryKey: ["albums"], queryFn: api.listAlbums });
+  const { data: albums, isPending, isError } = useQuery({
+    queryKey: ["albums"],
+    queryFn: api.listAlbums,
+    // Photo counts and covers change in the background (processing), so always refetch on visit.
+    staleTime: 0,
+  });
 
   return (
     <section className="space-y-6">

@@ -178,4 +178,52 @@ public class DynamoGalleryRepositoryTests
 
         await Assert.ThrowsAsync<TransactionCanceledException>(() => _repository.CreateShareAsync(share, Ct));
     }
+
+    [Fact]
+    public async Task RenameAlbum_UpdatesName_AndReturnsFalseWhenMissing()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Before");
+        await _repository.CreateAlbumAsync(album, Ct);
+
+        Assert.True(await _repository.RenameAlbumAsync(_userId, album.AlbumId, "After", Ct));
+        Assert.False(await _repository.RenameAlbumAsync(_userId, Keys.NewId(), "After", Ct));
+        Assert.Equal("After", (await _repository.GetAlbumAsync(_userId, album.AlbumId, Ct))!.Name);
+    }
+
+    [Fact]
+    public async Task DeleteAlbum_RemovesAlbumAndAllPhotos()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Doomed");
+        await _repository.CreateAlbumAsync(album, Ct);
+        for (var i = 0; i < 30; i++)
+            await _repository.CreatePhotoAsync(NewPhoto(album.AlbumId), Ct);
+
+        var deleted = await _repository.DeleteAlbumAsync(_userId, album.AlbumId, Ct);
+
+        Assert.Equal(30, deleted!.Count);
+        Assert.Null(await _repository.GetAlbumAsync(_userId, album.AlbumId, Ct));
+        Assert.Empty(await _repository.ListPhotosAsync(_userId, album.AlbumId, Ct));
+    }
+
+    [Fact]
+    public async Task UpdatePhotoDetails_SetsAndClearsCaption()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Details");
+        await _repository.CreateAlbumAsync(album, Ct);
+        var photo = NewPhoto(album.AlbumId);
+        await _repository.CreatePhotoAsync(photo, Ct);
+
+        await _repository.UpdatePhotoDetailsAsync(_userId, album.AlbumId, photo.PhotoId, "Hello", ["a", "b"], Ct);
+        var withCaption = await _repository.GetPhotoAsync(_userId, album.AlbumId, photo.PhotoId, Ct);
+        await _repository.UpdatePhotoDetailsAsync(_userId, album.AlbumId, photo.PhotoId, null, [], Ct);
+        var cleared = await _repository.GetPhotoAsync(_userId, album.AlbumId, photo.PhotoId, Ct);
+
+        Assert.Equal("Hello", withCaption!.Caption);
+        Assert.Equal(["a", "b"], withCaption.Tags);
+        Assert.Null(cleared!.Caption);
+        Assert.Empty(cleared.Tags);
+    }
 }

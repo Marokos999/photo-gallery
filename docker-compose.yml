@@ -6,7 +6,7 @@ services:
       - "127.0.0.1:4566:4566"
     environment:
       - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:?set LOCALSTACK_AUTH_TOKEN in .env}
-      - SERVICES=s3,dynamodb,lambda,iam,sts,logs
+      - SERVICES=s3,dynamodb,sqs,lambda,iam,sts,logs
       - AWS_DEFAULT_REGION=eu-central-1
     volumes:
       - ./infra/localstack/init:/etc/localstack/init/ready.d

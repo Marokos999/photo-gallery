@@ -20,4 +20,10 @@ public interface IGalleryRepository
 
     Task<Share?> GetShareAsync(string code, CancellationToken ct = default);
 
+    Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default);
+
+    Task<IReadOnlyList<Photo>?> DeleteAlbumAsync(string userId, string albumId, CancellationToken ct = default);
+
+    Task<bool> UpdatePhotoDetailsAsync(
+        string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default);
 }

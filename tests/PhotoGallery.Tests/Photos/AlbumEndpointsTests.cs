@@ -87,7 +87,7 @@ public class AlbumEndpointsTests(PhotosApiFactory factory) : IClassFixture<Photo
         Assert.Contains(S3Keys.Thumbnail(ready.PhotoId), readyResponse.ThumbnailUrl);
         Assert.Null(pendingResponse.ThumbnailUrl);
     }
-    
+
     [Fact]
     public async Task Preflight_FromFrontendOrigin_IsAllowed()
     {
@@ -102,6 +102,26 @@ public class AlbumEndpointsTests(PhotosApiFactory factory) : IClassFixture<Photo
         Assert.Equal("http://localhost:3000", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
     }
 
+    [Fact]
+    public async Task GetAlbum_ReturnsOwnAlbum()
+    {
+        var album = await SeedAlbumAsync();
+
+        var response = await factory.CreateClientFor(_userId)
+            .GetFromJsonAsync<AlbumResponse>($"/api/albums/{album.AlbumId}", Json, Ct);
+
+        Assert.Equal(album.Name, response!.Name);
+    }
+
+    [Fact]
+    public async Task GetAlbum_OfAnotherUser_Returns404()
+    {
+        var album = await SeedAlbumAsync();
+
+        var response = await factory.CreateClientFor(Keys.NewId()).GetAsync($"/api/albums/{album.AlbumId}", Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
     private async Task<Album> SeedAlbumAsync()
     {
         var album = new Album { UserId = _userId, AlbumId = Keys.NewId(), Name = "Seeded", CreatedAt = DateTimeOffset.UtcNow };

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "local": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "TABLE_NAME": "PhotoGallery",
+        "BUCKET_NAME": "photo-gallery-local",
+        "LOCALSTACK_ENDPOINT": "http://127.0.0.1:4566",
+        "AWS_REGION": "eu-central-1",
+        "PROCESSING_QUEUE_NAME": "photo-gallery-processing"
+      }
+    }
+  }
+}

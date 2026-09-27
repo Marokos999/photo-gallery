@@ -5,6 +5,7 @@ from botocore.exceptions import ClientError
 
 BUCKET = "photo-gallery-local"
 TABLE = "PhotoGallery"
+QUEUE = "photo-gallery-processing"
 ENDPOINT = "http://localhost:4566"
 REGION = os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
 
@@ -15,6 +16,7 @@ session = boto3.Session(
 )
 s3 = session.client("s3", endpoint_url=ENDPOINT)
 dynamodb = session.client("dynamodb", endpoint_url=ENDPOINT)
+sqs = session.client("sqs", endpoint_url=ENDPOINT)
 
 
 def create_bucket() -> None:
@@ -82,6 +84,27 @@ def create_table() -> None:
         print(f"table {TABLE} already exists")
 
 
+def create_processing_queue() -> None:
+    """Local stand-in for the S3 -> Lambda trigger: S3 notifies SQS, tools/PhotoGallery.LocalProcessor consumes it."""
+    queue_url = sqs.create_queue(QueueName=QUEUE)["QueueUrl"]
+    queue_arn = sqs.get_queue_attributes(QueueUrl=queue_url, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
+
+    s3.put_bucket_notification_configuration(
+        Bucket=BUCKET,
+        NotificationConfiguration={
+            "QueueConfigurations": [
+                {
+                    "QueueArn": queue_arn,
+                    "Events": ["s3:ObjectCreated:*"],
+                    "Filter": {"Key": {"FilterRules": [{"Name": "prefix", "Value": "originals/"}]}},
+                }
+            ]
+        },
+    )
+    print(f"queue {QUEUE} receives S3 originals/ events")
+
+
 create_bucket()
 create_table()
+create_processing_queue()
 print("photo-gallery init done")

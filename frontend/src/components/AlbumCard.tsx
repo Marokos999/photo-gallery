@@ -3,9 +3,9 @@ import type { Album } from "@/lib/types";
 
 export function AlbumCard({album}: {album: Album}) {
   return(
-    <Link href="/" className="group block overflow-hidden rounded-xl border border-neutral-200 bg-white
+    <Link href={`/album?id=${album.albumId}`} className="group block overflow-hidden rounded-xl border border-neutral-200 bg-white
       shadow-sm transition hover:shadow-md">
-      <div className="aspect-[4/3] overflow-hidden bg-neutral-100">
+      <div className="aspect-4/3 overflow-hidden bg-neutral-100">
         {album.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- static export: next/image optimization is unavailable
           <img

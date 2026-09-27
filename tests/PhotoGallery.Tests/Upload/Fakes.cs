@@ -44,6 +44,16 @@ internal sealed class FakeGalleryRepository : IGalleryRepository
     public Task CreateShareAsync(Share share, CancellationToken ct = default) => throw new NotImplementedException();
 
     public Task<Share?> GetShareAsync(string code, CancellationToken ct = default) => throw new NotImplementedException();
+
+    public Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task<IReadOnlyList<Photo>?> DeleteAlbumAsync(string userId, string albumId, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task<bool> UpdatePhotoDetailsAsync(
+        string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default) =>
+        throw new NotImplementedException();
 }
 
 internal sealed class FakeUrlSigner : IUrlSigner

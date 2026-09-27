@@ -8,4 +8,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/PhotoGallery.Tests/PhotoGallery.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/PhotoGallery.LocalProcessor/PhotoGallery.LocalProcessor.csproj" />
+  </Folder>
 </Solution>

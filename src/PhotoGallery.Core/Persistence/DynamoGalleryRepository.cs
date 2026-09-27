@@ -6,7 +6,10 @@ namespace PhotoGallery.Core.Persistence;
 
 public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOptions options) : IGalleryRepository
 {
+    private const int BatchWriteLimit = 25;
+
     private readonly string _table = options.TableName;
+
     public Task CreateAlbumAsync(Album album, CancellationToken ct = default) =>
     dynamoDB.PutItemAsync(new PutItemRequest
     {
@@ -253,5 +256,88 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
     {
         var item = await GetItemAsync(Keys.SharePk(code), Keys.ShareSk, ct);
         return item is null ? null : ItemMapper.ToShare(item);
+    }
+
+    public async Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default)
+    {
+        try
+        {
+            await dynamoDB.UpdateItemAsync(new UpdateItemRequest
+            {
+                TableName = _table,
+                Key = Key(Keys.UserPk(userId), Keys.AlbumSk(albumId)),
+                UpdateExpression = "SET #name = :name",
+                ConditionExpression = "attribute_exists(PK)",
+                ExpressionAttributeNames = new() { ["#name"] = "Name" },
+                ExpressionAttributeValues = new() { [":name"] = name.ToS() }
+            }, ct);
+            return true;
+        }
+        catch (ConditionalCheckFailedException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<Photo>?> DeleteAlbumAsync(string userId, string albumId, CancellationToken ct = default)
+    {
+        if (await GetAlbumAsync(userId, albumId, ct) is null)
+            return null;
+
+        var photos = await ListPhotosAsync(userId, albumId, ct);
+
+        var keys = photos
+            .Select(photo => Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photo.PhotoId)))
+            .Append(Key(Keys.UserPk(userId), Keys.AlbumSk(albumId)));
+
+        foreach (var chunk in keys.Chunk(BatchWriteLimit))
+            await BatchDeleteAsync(chunk, ct);
+
+        return photos;
+    }
+
+    public async Task<bool> UpdatePhotoDetailsAsync(
+        string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default)
+    {
+        var values = new Dictionary<string, AttributeValue>
+        {
+            [":tags"] = new() { L = tags.Select(tag => tag.ToS()).ToList() }
+        };
+        if (caption is not null)
+            values[":caption"] = caption.ToS();
+
+        try
+        {
+            await dynamoDB.UpdateItemAsync(new UpdateItemRequest
+            {
+                TableName = _table,
+                Key = Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photoId)),
+                UpdateExpression = caption is null
+                    ? "SET Tags = :tags REMOVE Caption"
+                    : "SET Tags = :tags, Caption = :caption",
+                ConditionExpression = "attribute_exists(PK)",
+                ExpressionAttributeValues = values
+            }, ct);
+            return true;
+        }
+        catch (ConditionalCheckFailedException)
+        {
+            return false;
+        }
+    }
+
+    private async Task BatchDeleteAsync(IEnumerable<Dictionary<string, AttributeValue>> keys, CancellationToken ct)
+    {
+        var requests = keys.Select(key => new WriteRequest { DeleteRequest = new DeleteRequest { Key = key } }).ToList();
+        var pending = new Dictionary<string, List<WriteRequest>> { [_table] = requests };
+
+        for (var attempt = 0; pending.Count > 0; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, attempt)), ct);
+
+            var response = await dynamoDB.BatchWriteItemAsync(new BatchWriteItemRequest { RequestItems = pending }, ct);
+            pending = response.UnprocessedItems is { Count: > 0 } unprocessed ? unprocessed : [];
+        }
     }
 }
