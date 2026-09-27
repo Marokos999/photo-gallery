@@ -34,6 +34,10 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+// Fail fast at startup if required configuration is missing.
+_ = app.Services.GetRequiredService<GalleryOptions>();
+
+
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
