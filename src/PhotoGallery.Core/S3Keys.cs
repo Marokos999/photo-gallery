@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace PhotoGallery.Core;
 
 public sealed record OriginalKeyParts(string UserId, string AlbumId, string PhotoId, string FileName);
@@ -13,7 +15,7 @@ public static class S3Keys
 
     public static string Preview(string photoId) => $"thumbs/{photoId}_1200.webp";
 
-    public static bool TryParseOriginal(string key, out OriginalKeyParts? parts)
+    public static bool TryParseOriginal(string key, [NotNullWhen(true)] out OriginalKeyParts? parts)
     {
         parts = null;
 
