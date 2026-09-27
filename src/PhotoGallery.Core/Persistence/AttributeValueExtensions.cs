@@ -26,6 +26,11 @@ internal static class AttributeValueExtensions
             ? int.Parse(n, CultureInfo.InvariantCulture)
             : null;
 
+    public static long? GetLongOrNull(this Dictionary<string, AttributeValue> item, string key) =>
+    item.TryGetValue(key, out var value) && value.N is { } n
+        ? long.Parse(n, CultureInfo.InvariantCulture)
+        : null;
+
     public static DateTimeOffset GetDate(this Dictionary<string, AttributeValue> item, string key) =>
         DateTimeOffset.Parse(item.GetString(key), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 

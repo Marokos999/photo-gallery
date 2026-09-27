@@ -165,4 +165,93 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         ["PK"] = pk.ToS(),
         ["SK"] = sk.ToS()
     };
+
+    public async Task<bool> DeletePhotoAsync(Photo photo, CancellationToken ct = default)
+    {
+        List<TransactWriteItem> items =
+        [
+            new TransactWriteItem
+        {
+            Delete = new Delete
+            {
+                TableName = _table,
+                Key = Key(Keys.UserPk(photo.UserId), Keys.PhotoSk(photo.AlbumId, photo.PhotoId)),
+                ConditionExpression = "#status = :status",
+                ExpressionAttributeNames = new() {["#status"] = "Status"},
+                ExpressionAttributeValues = new() {[":status"] = photo.Status.ToString().ToS()}
+            }
+        }
+        ];
+
+        if (photo.Status == PhotoStatus.Ready)
+        {
+            items.Add(new TransactWriteItem
+            {
+                Update = new Update
+                {
+                    TableName = _table,
+                    Key = Key(Keys.UserPk(photo.UserId), Keys.AlbumSk(photo.AlbumId)),
+                    UpdateExpression = "ADD PhotoCount :minusOne",
+                    ConditionExpression = "attribute_exists(PK)",
+                    ExpressionAttributeValues = new() { [":minusOne"] = (-1).ToN() }
+                }
+            });
+        }
+
+        try
+        {
+            await dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
+            {
+                TransactItems = items,
+
+            }, ct);
+            return true;
+        }
+        catch (TransactionCanceledException)
+        {
+            return false;
+        }
+    }
+
+    public Task SetAlbumCoverAsync(string userId, string albumId, string? coverPhotoKey, CancellationToken ct = default)
+    => dynamoDB.UpdateItemAsync(new UpdateItemRequest
+    {
+        TableName = _table,
+        Key = Key(Keys.UserPk(userId), Keys.AlbumSk(albumId)),
+        UpdateExpression = coverPhotoKey is null ? "REMOVE CoverPhotoKey" : "SET CoverPhotoKey = :cover",
+        ConditionExpression = "attribute_exists(PK)",
+        ExpressionAttributeValues = coverPhotoKey is null ? null : new() { [":cover"] = coverPhotoKey.ToS() }
+    }, ct);
+
+    public Task CreateShareAsync(Share share, CancellationToken ct = default) =>
+          dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
+          {
+              TransactItems =
+              [
+                  new TransactWriteItem
+                {
+                    Put = new Put
+                    {
+                        TableName = _table,
+                        Item = ItemMapper.ToItem(share),
+                        ConditionExpression = "attribute_not_exists(PK)"
+                    }
+                },
+                new TransactWriteItem
+                {
+                    ConditionCheck = new ConditionCheck
+                    {
+                        TableName = _table,
+                        Key = Key(Keys.UserPk(share.OwnerUserId), Keys.AlbumSk(share.AlbumId)),
+                        ConditionExpression = "attribute_exists(PK)"
+                    }
+                }
+              ]
+          }, ct);
+
+    public async Task<Share?> GetShareAsync(string code, CancellationToken ct = default)
+    {
+        var item = await GetItemAsync(Keys.SharePk(code), Keys.ShareSk, ct);
+        return item is null ? null : ItemMapper.ToShare(item);
+    }
 }

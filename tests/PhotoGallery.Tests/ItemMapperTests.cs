@@ -88,4 +88,33 @@ public class ItemMapperTests
 
         Assert.False(ItemMapper.ToItem(photo).ContainsKey("ExpiresAt"));
     }
+
+    [Fact]
+    public void Share_WithExpiry_RoundTrips()
+    {
+        var share = new Share
+        {
+            Code = "abc",
+            OwnerUserId = "u1",
+            AlbumId = "a1",
+            CreatedAt = Now,
+            ExpiresAt = Now.AddDays(7)
+        };
+
+        var item = ItemMapper.ToItem(share);
+
+        Assert.Equal("SHARE#abc", item["PK"].S);
+        Assert.Equivalent(share, ItemMapper.ToShare(item));
+    }
+
+    [Fact]
+    public void Share_WithoutExpiry_NeverExpires()
+    {
+        var share = new Share { Code = "abc", OwnerUserId = "u1", AlbumId = "a1", CreatedAt = Now };
+
+        var mapped = ItemMapper.ToShare(ItemMapper.ToItem(share));
+
+        Assert.Null(mapped.ExpiresAt);
+        Assert.False(mapped.IsExpired(Now.AddYears(10)));
+    }
 }

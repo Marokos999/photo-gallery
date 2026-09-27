@@ -1,9 +1,13 @@
+using System.Buffers.Text;
+using System.Security.Cryptography;
+
 namespace PhotoGallery.Core;
 
 public static class Keys
 {
     public const string AlbumSkPrefix = "ALBUM#";
     public const string PhotoSkPrefix = "PHOTO#";
+    public const string ShareSk = "SHARE";
 
     public static string UserPk(string userId) => $"USER#{userId}";
 
@@ -20,4 +24,8 @@ public static class Keys
     public static string NewId() => NewId(DateTimeOffset.UtcNow);
 
     public static string NewId(DateTimeOffset timestamp) => Guid.CreateVersion7(timestamp).ToString("N");
+
+    public static string SharePk(string code) => $"SHARE#{code}";
+
+    public static string NewShareCode() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
 }

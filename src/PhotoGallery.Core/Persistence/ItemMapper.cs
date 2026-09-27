@@ -7,6 +7,7 @@ public static class ItemMapper
 {
     public const string AlbumType = "Album";
     public const string PhotoType = "Photo";
+    public const string ShareType = "Share";
     public const string AlbumGsiSk = "ALBUM";
     public static readonly TimeSpan PendingTtl = TimeSpan.FromHours(24);
     public static Dictionary<string, AttributeValue> ToItem(Album album)
@@ -85,5 +86,33 @@ public static class ItemMapper
         Width = item.GetIntOrNull("Width"),
         Height = item.GetIntOrNull("Height"),
         CreatedAt = item.GetDate("CreatedAt")
+    };
+
+    public static Dictionary<string, AttributeValue> ToItem(Share share)
+    {
+        var item = new Dictionary<string, AttributeValue>
+        {
+            ["PK"] = Keys.SharePk(share.Code).ToS(),
+            ["SK"] = Keys.ShareSk.ToS(),
+            ["EntityType"] = ShareType.ToS(),
+            ["Code"] = share.Code.ToS(),
+            ["OwnerUserId"] = share.OwnerUserId.ToS(),
+            ["AlbumId"] = share.AlbumId.ToS(),
+            ["CreatedAt"] = share.CreatedAt.ToS()
+        };
+
+        if (share.ExpiresAt is { } expiresAt)
+            item["ExpiresAt"] = expiresAt.ToUnixTimeSeconds().ToN();
+
+        return item;
+    }
+
+    public static Share ToShare(Dictionary<string, AttributeValue> item) => new()
+    {
+        Code = item.GetString("Code"),
+        OwnerUserId = item.GetString("OwnerUserId"),
+        AlbumId = item.GetString("AlbumId"),
+        CreatedAt = item.GetDate("CreatedAt"),
+        ExpiresAt = item.GetLongOrNull("ExpiresAt") is { } seconds ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null
     };
 }

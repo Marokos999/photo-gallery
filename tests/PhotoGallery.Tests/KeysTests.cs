@@ -25,4 +25,14 @@ public class KeysTests
 
         Assert.True(string.CompareOrdinal(first, second) < 0);
     }
+
+    [Fact]
+    public void NewShareCode_IsUrlSafeAndUnique()
+    {
+        var code = Keys.NewShareCode();
+
+        Assert.Equal(22, code.Length);
+        Assert.DoesNotContain(code, c => c is '+' or '/' or '=');
+        Assert.NotEqual(code, Keys.NewShareCode());
+    }
 }

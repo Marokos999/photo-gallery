@@ -78,6 +78,19 @@ public class DynamoGalleryRepositoryTests
         Assert.Equal(1, storedAlbum!.PhotoCount);
         Assert.Equal(image.ThumbnailKey, storedAlbum.CoverPhotoKey);
     }
+    private async Task<(Album Album, Photo Photo)> CreateReadyPhotoAsync()
+    {
+        var album = NewAlbum("Album");
+        await _repository.CreateAlbumAsync(album, Ct);
+        var photo = NewPhoto(album.AlbumId);
+        await _repository.CreatePhotoAsync(photo, Ct);
+        var image = new ProcessedImage(S3Keys.Thumbnail(photo.PhotoId), S3Keys.Preview(photo.PhotoId), 800, 600);
+        await _repository.MarkPhotoReadyAsync(_userId, album.AlbumId, photo.PhotoId, image, Ct);
+
+        var ready = await _repository.GetPhotoAsync(_userId, album.AlbumId, photo.PhotoId, Ct);
+        return (album, ready!);
+    }
+
 
     private Album NewAlbum(string name) => new()
     {
@@ -98,5 +111,71 @@ public class DynamoGalleryRepositoryTests
             OriginalKey = S3Keys.Original(_userId, albumId, photoId, "photo.jpg"),
             CreatedAt = DateTimeOffset.UtcNow
         };
+    }
+
+    [Fact]
+    public async Task DeletePhoto_Ready_RemovesItAndDecrementsCount()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var (album, photo) = await CreateReadyPhotoAsync();
+
+        Assert.True(await _repository.DeletePhotoAsync(photo, Ct));
+
+        Assert.Null(await _repository.GetPhotoAsync(_userId, album.AlbumId, photo.PhotoId, Ct));
+        Assert.Equal(0, (await _repository.GetAlbumAsync(_userId, album.AlbumId, Ct))!.PhotoCount);
+    }
+
+    [Fact]
+    public async Task DeletePhoto_WithStaleStatus_ReturnsFalse()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var (_, readyPhoto) = await CreateReadyPhotoAsync();
+        var stalePendingCopy = readyPhoto with { Status = PhotoStatus.Pending };
+
+        Assert.False(await _repository.DeletePhotoAsync(stalePendingCopy, Ct));
+    }
+
+    [Fact]
+    public async Task SetAlbumCover_SetsAndRemoves()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Cover");
+        await _repository.CreateAlbumAsync(album, Ct);
+
+        await _repository.SetAlbumCoverAsync(_userId, album.AlbumId, "thumbs/x_400.webp", Ct);
+        Assert.Equal("thumbs/x_400.webp", (await _repository.GetAlbumAsync(_userId, album.AlbumId, Ct))!.CoverPhotoKey);
+
+        await _repository.SetAlbumCoverAsync(_userId, album.AlbumId, null, Ct);
+        Assert.Null((await _repository.GetAlbumAsync(_userId, album.AlbumId, Ct))!.CoverPhotoKey);
+    }
+
+    [Fact]
+    public async Task CreateShare_CanBeReadByCode()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Shared");
+        await _repository.CreateAlbumAsync(album, Ct);
+        var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var share = new Share
+        {
+            Code = Keys.NewShareCode(),
+            OwnerUserId = _userId,
+            AlbumId = album.AlbumId,
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7)
+        };
+
+        await _repository.CreateShareAsync(share, Ct);
+
+        Assert.Equivalent(share, await _repository.GetShareAsync(share.Code, Ct));
+    }
+
+    [Fact]
+    public async Task CreateShare_ForMissingAlbum_Throws()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var share = new Share { Code = Keys.NewShareCode(), OwnerUserId = _userId, AlbumId = Keys.NewId() };
+
+        await Assert.ThrowsAsync<TransactionCanceledException>(() => _repository.CreateShareAsync(share, Ct));
     }
 }
