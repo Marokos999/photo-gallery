@@ -30,7 +30,13 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddAuthentication(GalleryAuthenticationHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, GalleryAuthenticationHandler>
                 (GalleryAuthenticationHandler.SchemeName, null);
+
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options =>
+    options.AddDefaultPolicy(policy => policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
+
 builder.Services.AddAuthorization();
+
 
 var app = builder.Build();
 
@@ -39,6 +45,7 @@ _ = app.Services.GetRequiredService<GalleryOptions>();
 
 
 app.UseExceptionHandler();
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 

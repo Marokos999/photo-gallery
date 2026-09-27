@@ -87,6 +87,20 @@ public class AlbumEndpointsTests(PhotosApiFactory factory) : IClassFixture<Photo
         Assert.Contains(S3Keys.Thumbnail(ready.PhotoId), readyResponse.ThumbnailUrl);
         Assert.Null(pendingResponse.ThumbnailUrl);
     }
+    
+    [Fact]
+    public async Task Preflight_FromFrontendOrigin_IsAllowed()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/albums");
+        request.Headers.Add("Origin", "http://localhost:3000");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+        request.Headers.Add("Access-Control-Request-Headers", "x-debug-user-id");
+
+        var response = await factory.CreateClient().SendAsync(request, Ct);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal("http://localhost:3000", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+    }
 
     private async Task<Album> SeedAlbumAsync()
     {
