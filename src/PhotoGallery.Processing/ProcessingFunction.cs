@@ -50,7 +50,7 @@ public sealed class ProcessingFunction
         this.options = options;
     }
 
-    [Logging(ClearState = true)]
+    [Logging]
     [Metrics(Namespace = Observability.MetricsNamespace, CaptureColdStart = true)]
     [Tracing]
     public async Task HandleAsync(S3Event s3Event, ILambdaContext context)
@@ -71,8 +71,6 @@ public sealed class ProcessingFunction
             Logger.LogWarning("Ignoring object with unexpected key {Key}", key);
             return;
         }
-
-        Logger.AppendKey("photoId", parts.PhotoId);
 
         var existing = await repo.GetPhotoAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
         if (existing is not { Status: PhotoStatus.Pending })
