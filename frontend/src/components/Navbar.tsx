@@ -7,6 +7,7 @@ import { config } from "@/lib/config";
 const links = [
   { href: "/", label: "Albums", matches: (path: string) => path === "/" || path.startsWith("/album") },
   { href: "/upload", label: "Upload", matches: (path: string) => path.startsWith("/upload") },
+  { href: "/search", label: "Search", matches: (path: string) => path.startsWith("/search") },
 ];
 
 export function Navbar() {

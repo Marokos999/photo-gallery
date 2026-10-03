@@ -7,12 +7,11 @@ import type { Photo, PhotoDetails } from "@/lib/types";
 import { button, input, parseTags } from "@/lib/ui";
 
 interface EditPhotoDialogProps {
-  albumId: string;
   photo: Photo;
   onClose: () => void;
 }
 
-export function EditPhotoDialog({ albumId, photo, onClose }: EditPhotoDialogProps) {
+export function EditPhotoDialog({ photo, onClose }: EditPhotoDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const queryClient = useQueryClient();
 
@@ -22,9 +21,13 @@ export function EditPhotoDialog({ albumId, photo, onClose }: EditPhotoDialogProp
   }, []);
 
   const update = useMutation({
-    mutationFn: (details: PhotoDetails) => api.updatePhoto(albumId, photo.photoId, details),
+    mutationFn: (details: PhotoDetails) => api.updatePhoto(photo.albumId, photo.photoId, details),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["photos", albumId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["photos", photo.albumId] }),
+        queryClient.invalidateQueries({ queryKey: ["search"] }),
+        queryClient.invalidateQueries({ queryKey: ["tags"] }),
+      ]);
       onClose();
     },
   });

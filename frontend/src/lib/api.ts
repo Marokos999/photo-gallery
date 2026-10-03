@@ -1,5 +1,15 @@
 import { config } from "./config";
-import type { Album, PhotoDetails, PhotoPage, Share, SharedAlbum, UploadRequest, UploadTicket } from "./types";
+import type {
+  Album,
+  PhotoDetails,
+  PhotoPage,
+  Share,
+  SharedAlbum,
+  ShareSummary,
+  TagCount,
+  UploadRequest,
+  UploadTicket,
+} from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -66,6 +76,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ expiresInDays }),
     }),
+
+  searchPhotos: (tag: string, cursor?: string) =>
+    request<PhotoPage>(
+      config.apiUrl,
+      `/api/photos?tag=${encodeURIComponent(tag)}&limit=${PHOTO_PAGE_SIZE}` +
+        (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""),
+    ),
+
+  listTags: () => request<TagCount[]>(config.apiUrl, "/api/tags"),
+
+  listShares: (albumId: string) => request<ShareSummary[]>(config.apiUrl, `/api/albums/${albumId}/shares`),
+
+  revokeShare: (code: string) =>
+    request<void>(config.apiUrl, `/api/shares/${encodeURIComponent(code)}`, { method: "DELETE" }),
 
   getSharedAlbum: (code: string) =>
     request<SharedAlbum>(config.apiUrl, `/api/shared/${encodeURIComponent(code)}`, {}, false),

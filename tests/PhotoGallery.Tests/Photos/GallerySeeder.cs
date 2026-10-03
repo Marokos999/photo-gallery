@@ -12,7 +12,8 @@ internal static class GallerySeeder
         return album;
     }
 
-    public static async Task<Photo> SeedPhotoAsync(this InMemoryGalleryRepository repository, string userId, string albumId, bool ready = false)
+    public static async Task<Photo> SeedPhotoAsync(
+        this InMemoryGalleryRepository repository, string userId, string albumId, bool ready = false, IReadOnlyList<string>? tags = null)
     {
         var photoId = Keys.NewId();
         var photo = new Photo
@@ -21,6 +22,7 @@ internal static class GallerySeeder
             AlbumId = albumId,
             PhotoId = photoId,
             OriginalKey = S3Keys.Original(userId, albumId, photoId, "photo.jpg"),
+            Tags = tags ?? [],
             CreatedAt = DateTimeOffset.UtcNow
         };
         await repository.CreatePhotoAsync(photo);

@@ -13,6 +13,7 @@ public sealed record AlbumResponse(
 
 public sealed record PhotoResponse(
     string PhotoId,
+    string AlbumId,
     PhotoStatus Status,
     string? Caption,
     IReadOnlyList<string> Tags,
@@ -42,3 +43,5 @@ public sealed record RenameAlbumRequest(string? Name);
 public sealed record UpdatePhotoRequest(string? Caption, IReadOnlyList<string>? Tags);
 
 public sealed record PhotoPageResponse(IReadOnlyList<PhotoResponse> Items, string? NextCursor);
+
+public sealed record ShareSummaryResponse(string Code, DateTimeOffset CreatedAt, DateTimeOffset? ExpiresAt, bool IsExpired);

@@ -17,7 +17,42 @@ public static class ShareEndpoints
     {
         api.MapPost("/albums/{albumId}/share", CreateShare);
         api.MapGet("/shared/{code}", GetSharedAlbum).AllowAnonymous();
+        api.MapGet("/albums/{albumId}/shares", ListShares);
+        api.MapDelete("/shares/{code}", RevokeShare);
         return api;
+    }
+
+    private static async Task<Results<Ok<List<ShareSummaryResponse>>, NotFound>> ListShares(
+        string albumId,
+        ClaimsPrincipal user,
+        IGalleryRepository repository,
+        TimeProvider time,
+        CancellationToken ct)
+    {
+        var userId = user.GetUserId();
+        if (!IdFormats.IsEntityId(albumId) || await repository.GetAlbumAsync(userId, albumId, ct) is null)
+            return TypedResults.NotFound();
+
+        var now = time.GetUtcNow();
+        var shares = await repository.ListSharesAsync(userId, albumId, ct);
+
+        return TypedResults.Ok(shares
+            .OrderByDescending(share => share.CreatedAt)
+            .Select(share => new ShareSummaryResponse(share.Code, share.CreatedAt, share.ExpiresAt, share.IsExpired(now)))
+            .ToList());
+    }
+
+    private static async Task<Results<NoContent, NotFound>> RevokeShare(
+        string code,
+        ClaimsPrincipal user,
+        IGalleryRepository repository,
+        CancellationToken ct)
+    {
+        // Someone else's code and an unknown code look the same: 404.
+        if (!IdFormats.IsShareCode(code) || !await repository.DeleteShareAsync(user.GetUserId(), code, ct))
+            return TypedResults.NotFound();
+
+        return TypedResults.NoContent();
     }
 
     private static async Task<Results<Created<ShareResponse>, NotFound, ValidationProblem>> CreateShare(

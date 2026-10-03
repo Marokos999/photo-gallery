@@ -8,6 +8,7 @@ public static class ItemMapper
     public const string AlbumType = "Album";
     public const string PhotoType = "Photo";
     public const string ShareType = "Share";
+    public const string PhotoTagType = "PhotoTag";
     public static readonly TimeSpan PendingTtl = TimeSpan.FromHours(24);
     public static Dictionary<string, AttributeValue> ToItem(Album album)
     {
@@ -113,4 +114,18 @@ public static class ItemMapper
         CreatedAt = item.GetDate("CreatedAt"),
         ExpiresAt = item.GetLongOrNull("ExpiresAt") is { } seconds ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null
     };
+
+    /// <summary>Pointer item that makes "photos with tag X" a single Query instead of a scan.</summary>
+    public static Dictionary<string, AttributeValue> ToTagItem(Photo photo, string tag) => new()
+    {
+        ["PK"] = Keys.UserPk(photo.UserId).ToS(),
+        ["SK"] = Keys.TagSk(tag, photo.PhotoId).ToS(),
+        ["EntityType"] = PhotoTagType.ToS(),
+        ["Tag"] = tag.ToS(),
+        ["AlbumId"] = photo.AlbumId.ToS(),
+        ["PhotoId"] = photo.PhotoId.ToS()
+    };
+
+    public static (string Tag, string AlbumId, string PhotoId) ToTagPointer(Dictionary<string, AttributeValue> item) =>
+        (item.GetString("Tag"), item.GetString("AlbumId"), item.GetString("PhotoId"));
 }

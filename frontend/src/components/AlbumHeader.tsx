@@ -4,7 +4,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ShareButton } from "@/components/ShareButton";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { ShareManager } from "@/components/ShareManager";
 import { api } from "@/lib/api";
 import type { Album } from "@/lib/types";
 import { button, input } from "@/lib/ui";
@@ -16,6 +17,7 @@ interface AlbumHeaderProps {
 
 export function AlbumHeader({ album, readyPhotoCount }: AlbumHeaderProps) {
   const [editing, setEditing] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -35,7 +37,11 @@ export function AlbumHeader({ album, readyPhotoCount }: AlbumHeaderProps) {
     onSuccess: async () => {
       queryClient.removeQueries({ queryKey: ["album", album.albumId] });
       queryClient.removeQueries({ queryKey: ["photos", album.albumId] });
-      await queryClient.invalidateQueries({ queryKey: ["albums"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["albums"] }),
+        queryClient.invalidateQueries({ queryKey: ["search"] }),
+        queryClient.invalidateQueries({ queryKey: ["tags"] }),
+      ]);
       router.push("/");
     },
   });
@@ -46,9 +52,14 @@ export function AlbumHeader({ album, readyPhotoCount }: AlbumHeaderProps) {
     else setEditing(false);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     const photos = readyPhotoCount === 1 ? "1 photo" : `${readyPhotoCount} photos`;
-    if (window.confirm(`Delete "${album.name}" and its ${photos}? This cannot be undone.`)) remove.mutate();
+    const confirmed = await confirm({
+      title: `Delete "${album.name}"?`,
+      message: `The album, its ${photos} and all of its share links are removed permanently.`,
+      confirmLabel: "Delete album",
+    });
+    if (confirmed) remove.mutate();
   }
 
   return (
@@ -85,11 +96,17 @@ export function AlbumHeader({ album, readyPhotoCount }: AlbumHeaderProps) {
             Rename
           </button>
         )}
-        <button type="button" onClick={confirmDelete} disabled={remove.isPending} className={button.danger}>
+        <button
+          type="button"
+          onClick={() => void confirmDelete()}
+          disabled={remove.isPending}
+          className={button.danger}
+        >
           {remove.isPending ? "Deleting…" : "Delete album"}
         </button>
-        <ShareButton albumId={album.albumId} />
+        <ShareManager albumId={album.albumId} />
       </div>
+      {confirmDialog}
     </div>
   );
 }

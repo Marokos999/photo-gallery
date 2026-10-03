@@ -20,11 +20,11 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
     }, ct);
 
     public Task CreatePhotoAsync(Photo photo, CancellationToken ct = default) =>
-     dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
-     {
-         TransactItems =
-         [
-             new TransactWriteItem
+        dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
+        {
+            TransactItems =
+            [
+                new TransactWriteItem
                 {
                     Put = new Put
                     {
@@ -41,9 +41,11 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
                         Key = Key(Keys.UserPk(photo.UserId), Keys.AlbumSk(photo.AlbumId)),
                         ConditionExpression = "attribute_exists(PK)"
                     }
-                }
-         ]
-     }, ct);
+                },
+                // Tag pointers are written in the same transaction, so search never disagrees with the photo.
+                .. photo.Tags.Select(tag => PutTagItem(photo, tag))
+            ]
+        }, ct);
 
     public async Task<Album?> GetAlbumAsync(string userId, string albumId, CancellationToken ct = default)
     {
@@ -266,6 +268,8 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
             });
         }
 
+        items.AddRange(photo.Tags.Select(tag => DeleteTagItem(photo, tag)));
+
         try
         {
             await dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest
@@ -382,6 +386,7 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         // Share links go with the album, otherwise they would linger as dead records until TTL.
         var keys = photos
             .Select(photo => Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photo.PhotoId)))
+            .Concat(photos.SelectMany(photo => photo.Tags.Select(tag => Key(Keys.UserPk(userId), Keys.TagSk(tag, photo.PhotoId)))))
             .Concat(shares.Select(share => Key(Keys.SharePk(share.Code), Keys.ShareSk)))
             .Append(Key(Keys.UserPk(userId), Keys.AlbumSk(albumId)));
 
@@ -394,6 +399,9 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
     public async Task<bool> UpdatePhotoDetailsAsync(
         string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default)
     {
+        if (await GetPhotoAsync(userId, albumId, photoId, ct) is not { } photo)
+            return false;
+
         var values = new Dictionary<string, AttributeValue>
         {
             [":tags"] = new() { L = tags.Select(tag => tag.ToS()).ToList() }
@@ -401,24 +409,119 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         if (caption is not null)
             values[":caption"] = caption.ToS();
 
+        // Tag pointers follow the photo: drop pointers for removed tags, add pointers for new ones.
+        var oldKeys = photo.Tags.ToDictionary(Keys.TagKey);
+        var newKeys = tags.ToDictionary(Keys.TagKey);
+
+        List<TransactWriteItem> items =
+        [
+            new TransactWriteItem
+            {
+                Update = new Update
+                {
+                    TableName = _table,
+                    Key = Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photoId)),
+                    UpdateExpression = caption is null
+                        ? "SET Tags = :tags REMOVE Caption"
+                        : "SET Tags = :tags, Caption = :caption",
+                    ConditionExpression = "attribute_exists(PK)",
+                    ExpressionAttributeValues = values
+                }
+            },
+            .. oldKeys.Where(old => !newKeys.ContainsKey(old.Key)).Select(old => DeleteTagItem(photo, old.Value)),
+            // Put also refreshes the display text when only the casing of a tag changed.
+            .. newKeys.Values.Select(tag => PutTagItem(photo, tag))
+        ];
+
         try
         {
-            await dynamoDB.UpdateItemAsync(new UpdateItemRequest
-            {
-                TableName = _table,
-                Key = Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photoId)),
-                UpdateExpression = caption is null
-                    ? "SET Tags = :tags REMOVE Caption"
-                    : "SET Tags = :tags, Caption = :caption",
-                ConditionExpression = "attribute_exists(PK)",
-                ExpressionAttributeValues = values
-            }, ct);
+            await dynamoDB.TransactWriteItemsAsync(new TransactWriteItemsRequest { TransactItems = items }, ct);
             return true;
         }
-        catch (ConditionalCheckFailedException)
+        catch (TransactionCanceledException)
         {
             return false;
         }
+    }
+
+    public async Task<PhotoPage> SearchByTagAsync(
+        string userId, string tag, int limit, string? cursor, CancellationToken ct = default)
+    {
+        var pk = Keys.UserPk(userId);
+        var prefix = Keys.PhotosWithTagSkPrefix(tag);
+
+        Dictionary<string, AttributeValue>? startKey = null;
+        if (cursor is not null)
+        {
+            if (!PageCursor.TryDecode(cursor, prefix, out var sortKey))
+                throw new ArgumentException("Cursor does not belong to this tag.", nameof(cursor));
+            startKey = Key(pk, sortKey);
+        }
+
+        var response = await dynamoDB.QueryAsync(new QueryRequest
+        {
+            TableName = _table,
+            KeyConditionExpression = "PK = :pk AND begins_with(SK, :prefix)",
+            ExpressionAttributeValues = new() { [":pk"] = pk.ToS(), [":prefix"] = prefix.ToS() },
+            ExclusiveStartKey = startKey,
+            Limit = limit,
+            ScanIndexForward = false // UUIDv7 photo ids: newest first
+        }, ct);
+
+        var pointers = (response.Items ?? []).Select(ItemMapper.ToTagPointer).ToList();
+        var photos = await BatchGetPhotosAsync(userId, pointers.Select(p => (p.AlbumId, p.PhotoId)).ToList(), ct);
+        var nextCursor = response.LastEvaluatedKey is { Count: > 0 } last ? PageCursor.Encode(last["SK"].S) : null;
+
+        return new PhotoPage(photos, nextCursor);
+    }
+
+    public async Task<IReadOnlyList<TagCount>> ListTagsAsync(string userId, CancellationToken ct = default)
+    {
+        var items = await QueryBySkPrefixAsync(Keys.UserPk(userId), Keys.TagSkPrefix, ct);
+
+        return items
+            .Select(ItemMapper.ToTagPointer)
+            .GroupBy(pointer => Keys.TagKey(pointer.Tag))
+            .Select(group => new TagCount(group.First().Tag, group.Count()))
+            .OrderByDescending(tag => tag.Count)
+            .ThenBy(tag => tag.Tag, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private TransactWriteItem PutTagItem(Photo photo, string tag) =>
+        new() { Put = new Put { TableName = _table, Item = ItemMapper.ToTagItem(photo, tag) } };
+
+    private TransactWriteItem DeleteTagItem(Photo photo, string tag) =>
+        new() { Delete = new Delete { TableName = _table, Key = Key(Keys.UserPk(photo.UserId), Keys.TagSk(tag, photo.PhotoId)) } };
+
+    /// <summary>Loads photos by key, preserving the requested order. Missing photos are skipped.</summary>
+    private async Task<IReadOnlyList<Photo>> BatchGetPhotosAsync(
+        string userId, IReadOnlyList<(string AlbumId, string PhotoId)> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0)
+            return [];
+
+        var found = new Dictionary<string, Photo>();
+        var pending = new KeysAndAttributes { Keys = ids.Select(id => Key(Keys.UserPk(userId), Keys.PhotoSk(id.AlbumId, id.PhotoId))).ToList() };
+
+        for (var attempt = 0; pending.Keys is { Count: > 0 }; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * Math.Pow(2, attempt)), ct);
+
+            var response = await dynamoDB.BatchGetItemAsync(
+                new BatchGetItemRequest { RequestItems = new() { [_table] = pending } }, ct);
+
+            foreach (var item in response.Responses?.GetValueOrDefault(_table) ?? [])
+            {
+                var photo = ItemMapper.ToPhoto(item);
+                found[photo.PhotoId] = photo;
+            }
+
+            pending = response.UnprocessedKeys?.GetValueOrDefault(_table) ?? new KeysAndAttributes();
+        }
+
+        return ids.Where(id => found.ContainsKey(id.PhotoId)).Select(id => found[id.PhotoId]).ToList();
     }
 
     private async Task BatchDeleteAsync(IEnumerable<Dictionary<string, AttributeValue>> keys, CancellationToken ct)

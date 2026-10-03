@@ -21,8 +21,9 @@ and a **Next.js 16** static frontend — runnable end to end on a laptop with **
 - **Automatic processing** — every upload is auto-oriented, stripped of EXIF/GPS metadata and converted to
   400 px and 1200 px **WebP** variants.
 - **Masonry grid + lightbox** — thumbnails in the grid, 1200 px previews in the lightbox.
-- **Captions and tags** — set on upload or edited later.
-- **Share links** — unguessable, expiring (1–30 days) public links that expose only processed photos.
+- **Captions and tags** — set on upload or edited later; click a tag to see every photo with it.
+- **Tag search** — `/search` shows a tag cloud with counts and paginated results across all albums.
+- **Share links** — unguessable, expiring (1–30 days) public links that expose only processed photos; list and revoke them per album.
 - **Live status** — photos show *Processing…* and update on their own when ready.
 
 ## Architecture
@@ -106,6 +107,7 @@ One DynamoDB table (`PK` / `SK`) plus `GSI1`, which only indexes share links by 
 | --- | --- | --- | --- | --- |
 | Album | `USER#{userId}` | `ALBUM#{albumId}` | — | `Name`, `PhotoCount`, `CoverPhotoKey` |
 | Photo | `USER#{userId}` | `PHOTO#{albumId}#{photoId}` | — | `Status`, keys, size, caption, tags; `ExpiresAt` while pending |
+| Tag pointer | `USER#{userId}` | `TAG#{tag}#{photoId}` | — | `Tag`, `AlbumId`, `PhotoId`; written in the same transaction as the photo |
 | Share | `SHARE#{code}` | `SHARE` | `ALBUM#{albumId}` / `SHARE#{code}` | `OwnerUserId`, `AlbumId`, `ExpiresAt` (TTL) |
 
 IDs are **UUIDv7** (`Guid.CreateVersion7`) — time-sortable, so sort keys come back in creation order.
@@ -124,6 +126,10 @@ IDs are **UUIDv7** (`Guid.CreateVersion7`) — time-sortable, so sort keys come 
 | `PATCH` | `/api/albums/{albumId}/photos/{photoId}` | ✅ | Update caption and tags |
 | `DELETE` | `/api/albums/{albumId}/photos/{photoId}` | ✅ | Delete a photo and its S3 objects |
 | `POST` | `/api/albums/{albumId}/share` | ✅ | Create a share link (default 7 days, max 30) |
+| `GET` | `/api/albums/{albumId}/shares` | ✅ | List the album's share links |
+| `DELETE` | `/api/shares/{code}` | ✅ | Revoke a share link |
+| `GET` | `/api/photos?tag=&limit=&cursor=` | ✅ | Ready photos with a tag, across albums (newest first) |
+| `GET` | `/api/tags` | ✅ | The user's tags with photo counts |
 | `GET` | `/api/shared/{code}` | ❌ | Public album view — ready photos only, no owner data |
 
 Another user's album always returns **404**, never 403, so album IDs cannot be probed.
@@ -188,7 +194,7 @@ Open <http://localhost:3000>.
 ## Tests
 
 ```bash
-dotnet test                        # 111 tests; integration tests run when LocalStack is up, otherwise they are skipped
+dotnet test                        # 118 tests; integration tests run when LocalStack is up, otherwise they are skipped
 npm run lint --prefix frontend
 npm run format:check --prefix frontend
 ```

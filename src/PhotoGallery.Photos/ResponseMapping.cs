@@ -16,6 +16,7 @@ public static class ResponseMapping
     public static async Task<PhotoResponse> ToResponseAsync(this Photo photo, IUrlSigner signer) =>
         new(
             photo.PhotoId,
+            photo.AlbumId,
             photo.Status,
             photo.Caption,
             photo.Tags,

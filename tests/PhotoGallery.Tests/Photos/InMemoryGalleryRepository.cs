@@ -164,6 +164,37 @@ internal sealed class InMemoryGalleryRepository : IGalleryRepository
         return Task.FromResult<IReadOnlyList<Photo>?>(photos);
     }
 
+    public Task<PhotoPage> SearchByTagAsync(
+        string userId, string tag, int limit, string? cursor, CancellationToken ct = default)
+    {
+        var prefix = Keys.PhotosWithTagSkPrefix(tag);
+        string? after = null;
+        if (cursor is not null && !PageCursor.TryDecode(cursor, prefix, out after))
+            throw new ArgumentException("Cursor does not belong to this tag.", nameof(cursor));
+
+        var ordered = _photos.Values
+            .Where(p => p.UserId == userId && p.Tags.Any(t => Keys.TagKey(t) == Keys.TagKey(tag)))
+            .Select(p => (SortKey: Keys.TagSk(tag, p.PhotoId), Photo: p))
+            .OrderByDescending(x => x.SortKey, StringComparer.Ordinal)
+            .SkipWhile(x => after is not null && string.CompareOrdinal(x.SortKey, after) >= 0)
+            .Take(limit + 1)
+            .ToList();
+
+        var page = ordered.Take(limit).ToList();
+        var nextCursor = ordered.Count > limit ? PageCursor.Encode(page[^1].SortKey) : null;
+        return Task.FromResult(new PhotoPage(page.Select(x => x.Photo).ToList(), nextCursor));
+    }
+
+    public Task<IReadOnlyList<TagCount>> ListTagsAsync(string userId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<TagCount>>(_photos.Values
+            .Where(p => p.UserId == userId)
+            .SelectMany(p => p.Tags)
+            .GroupBy(Keys.TagKey)
+            .Select(g => new TagCount(g.First(), g.Count()))
+            .OrderByDescending(t => t.Count)
+            .ThenBy(t => t.Tag, StringComparer.OrdinalIgnoreCase)
+            .ToList());
+
     public Task<bool> UpdatePhotoDetailsAsync(
         string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default)
     {

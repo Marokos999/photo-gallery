@@ -10,6 +10,7 @@ export interface Album {
 
 export interface Photo {
   photoId: string;
+  albumId: string;
   status: PhotoStatus;
   caption: string | null;
   tags: string[];
@@ -65,4 +66,16 @@ export interface UploadTicket {
 export interface PhotoDetails {
   caption: string | null;
   tags: string[];
+}
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface ShareSummary {
+  code: string;
+  createdAt: string;
+  expiresAt: string | null;
+  isExpired: boolean;
 }

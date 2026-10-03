@@ -277,6 +277,47 @@ public class DynamoGalleryRepositoryTests
         Assert.Null(await _repository.GetShareAsync(second.Code, Ct));
     }
 
+    [Fact]
+    public async Task TagPointers_FollowCreateUpdateAndDelete()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Tagged");
+        await _repository.CreateAlbumAsync(album, Ct);
+        var photo = NewPhoto(album.AlbumId) with { Tags = ["Sea", "sun"] };
+        await _repository.CreatePhotoAsync(photo, Ct);
+
+        async Task<IReadOnlyList<string>> Search(string tag) =>
+            (await _repository.SearchByTagAsync(_userId, tag, 10, null, Ct)).Items.Select(p => p.PhotoId).ToList();
+
+        Assert.Equal([photo.PhotoId], await Search("SEA"));
+
+        await _repository.UpdatePhotoDetailsAsync(_userId, album.AlbumId, photo.PhotoId, null, ["sun", "mountain"], Ct);
+        Assert.Empty(await Search("sea"));
+        Assert.Equal([photo.PhotoId], await Search("mountain"));
+        Assert.Equivalent(new[] { "sun", "mountain" }, (await _repository.ListTagsAsync(_userId, Ct)).Select(t => t.Tag));
+
+        var stored = await _repository.GetPhotoAsync(_userId, album.AlbumId, photo.PhotoId, Ct);
+        await _repository.DeletePhotoAsync(stored!, Ct);
+        Assert.Empty(await Search("sun"));
+        Assert.Empty(await _repository.ListTagsAsync(_userId, Ct));
+    }
+
+    [Fact]
+    public async Task TagSearch_DoesNotMatchTagsSharingAPrefix()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Prefixes");
+        await _repository.CreateAlbumAsync(album, Ct);
+        var plain = NewPhoto(album.AlbumId) with { Tags = ["a"] };
+        var hashed = NewPhoto(album.AlbumId) with { Tags = ["a#b"] };
+        await _repository.CreatePhotoAsync(plain, Ct);
+        await _repository.CreatePhotoAsync(hashed, Ct);
+
+        var result = await _repository.SearchByTagAsync(_userId, "a", 10, null, Ct);
+
+        Assert.Equal(plain.PhotoId, Assert.Single(result.Items).PhotoId);
+    }
+
     private Share NewShare(string albumId) => new()
     {
         Code = Keys.NewShareCode(),

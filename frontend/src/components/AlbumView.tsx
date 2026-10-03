@@ -62,7 +62,7 @@ export function AlbumView() {
 
       {photos.isPending && <p className="text-neutral-500">Loading photos…</p>}
       {photos.isError && <p className="text-red-600">Could not load photos.</p>}
-      {photos.isSuccess && <PhotoGrid albumId={albumId} photos={allPhotos} />}
+      {photos.isSuccess && <PhotoGrid photos={allPhotos} />}
 
       {photos.hasNextPage && (
         <>

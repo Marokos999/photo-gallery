@@ -34,6 +34,12 @@ public interface IGalleryRepository
 
     Task<IReadOnlyList<Photo>?> DeleteAlbumAsync(string userId, string albumId, CancellationToken ct = default);
 
+    /// <summary>Photos carrying <paramref name="tag"/> (case-insensitive), newest first, across all albums.</summary>
+    Task<PhotoPage> SearchByTagAsync(string userId, string tag, int limit, string? cursor, CancellationToken ct = default);
+
+    /// <summary>All tags of the user with the number of photos carrying each, most used first.</summary>
+    Task<IReadOnlyList<TagCount>> ListTagsAsync(string userId, CancellationToken ct = default);
+
     Task<bool> UpdatePhotoDetailsAsync(
         string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default);
 }

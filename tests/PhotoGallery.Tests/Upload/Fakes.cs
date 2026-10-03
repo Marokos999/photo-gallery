@@ -65,6 +65,13 @@ internal sealed class FakeGalleryRepository : IGalleryRepository
     public Task<IReadOnlyList<Photo>?> DeleteAlbumAsync(string userId, string albumId, CancellationToken ct = default) =>
         throw new NotImplementedException();
 
+    public Task<PhotoPage> SearchByTagAsync(
+        string userId, string tag, int limit, string? cursor, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task<IReadOnlyList<TagCount>> ListTagsAsync(string userId, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
     public Task<bool> UpdatePhotoDetailsAsync(
         string userId, string albumId, string photoId, string? caption, IReadOnlyList<string> tags, CancellationToken ct = default) =>
         throw new NotImplementedException();

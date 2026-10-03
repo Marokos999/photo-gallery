@@ -29,5 +29,14 @@ public static class Keys
 
     public static string SharePk(string code) => $"SHARE#{code}";
 
+    public const string TagSkPrefix = "TAG#";
+
+    /// <summary>Case-insensitive and escaped, so a tag containing "#" cannot match another tag's prefix.</summary>
+    public static string TagKey(string tag) => Uri.EscapeDataString(tag.ToLowerInvariant());
+
+    public static string TagSk(string tag, string photoId) => $"{TagSkPrefix}{TagKey(tag)}#{photoId}";
+
+    public static string PhotosWithTagSkPrefix(string tag) => $"{TagSkPrefix}{TagKey(tag)}#";
+
     public static string NewShareCode() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
 }
