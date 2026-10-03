@@ -19,6 +19,7 @@ Globals:
         S3_PUBLIC_ENDPOINT: ""
         POWERTOOLS_LOG_LEVEL: Information
         POWERTOOLS_METRICS_NAMESPACE: PhotoGallery
+        POWERTOOLS_TRACE_DISABLED: "false"
 
 Resources:
   PhotoBucket:

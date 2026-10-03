@@ -22,7 +22,7 @@ public sealed class UploadFunction
 
     static UploadFunction()
     {
-        if (Observability.IsRunningInLambda)
+        if (Observability.IsTracingEnabled)
             Tracing.RegisterForAllServices();
     }
 

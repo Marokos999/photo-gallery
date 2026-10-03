@@ -27,7 +27,7 @@ public sealed class ProcessingFunction
 
     static ProcessingFunction()
     {
-        if (Observability.IsRunningInLambda)
+        if (Observability.IsTracingEnabled)
             Tracing.RegisterForAllServices();
     }
 
