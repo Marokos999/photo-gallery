@@ -13,7 +13,9 @@ organize them in albums and share an album through an expiring public link.
 Built as a portfolio project around **AWS Lambda (.NET 10)**, **ImageSharp**, **S3**, **DynamoDB single-table design**
 and a **Next.js 16** static frontend — runnable end to end on a laptop with **LocalStack**.
 
-![Album page](docs/screenshots/album.png)
+![Demo: create an album, upload tagged photos, search by tag, share a public link](docs/demo.gif)
+
+*Recorded against the local stack (LocalStack + `sam local`); the upload part is sped up.*
 
 ## Features
 
@@ -150,6 +152,7 @@ photo-gallery/
 ├── tools/PhotoGallery.LocalProcessor/  # local stand-in for the S3 → Lambda trigger
 ├── frontend/                       # Next.js 16 static site
 ├── infra/localstack/               # LocalStack init script (bucket, table, queue) and seed data
+├── docs/                           # ADRs, demo GIF and screenshots
 ├── template.yaml                   # AWS SAM template
 └── docker-compose.yml              # LocalStack
 ```
@@ -219,6 +222,9 @@ extra API calls. X-Ray instrumentation of the AWS SDK is switched off under Loca
 
 ## Design decisions
 
+The larger decisions are written up as [Architecture Decision Records](docs/adr/README.md)
+(serverless on Lambda, presigned POST, single-table DynamoDB, async processing, static frontend, identity, observability).
+
 | Decision | Why |
 | --- | --- |
 | **Presigned POST, direct browser → S3** | Lambda never handles image bytes: no API Gateway 10 MB limit, no Lambda timeout risk, cheaper. The POST policy makes S3 reject files over 25 MB or with another content type — a presigned PUT cannot limit size. |
@@ -246,10 +252,23 @@ extra API calls. X-Ray instrumentation of the AWS SDK is switched off under Loca
 
 ## Deployment
 
-`template.yaml` describes the full AWS stack (S3 bucket with the processing trigger, DynamoDB table with TTL,
-HTTP API and the three functions on `dotnet10` / arm64) and can be deployed with `sam deploy`.
-The project is currently run locally; adding a Cognito user pool and hosting the static frontend on S3 + CloudFront
-are the remaining steps for a public deployment.
+`template.yaml` describes the full AWS stack: S3 bucket with the processing trigger, DynamoDB table with TTL and
+Streams, a Cognito user pool, the HTTP API with a **JWT authorizer** (share links and health stay public) and the four
+functions on `dotnet10` / arm64 with X-Ray tracing.
+
+```bash
+sam build
+sam deploy --guided --parameter-overrides AllowedOrigin=https://gallery.example.com
+```
+
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| `AllowedOrigin` | `http://localhost:3000` | Frontend origin for API Gateway, Photos API and S3 CORS |
+
+Outputs: `ApiUrl` (for `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_UPLOAD_URL`), `UserPoolId`, `UserPoolClientId`.
+
+The project is run locally; for a public deployment the frontend still needs a sign-in flow (Cognito hosted UI or
+Amplify Auth) that sends `Authorization: Bearer <token>`, and the static `out/` folder hosted on S3 + CloudFront.
 
 ## License
 

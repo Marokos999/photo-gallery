@@ -2,6 +2,15 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Photo Gallery - serverless photo upload, processing and albums
 
+Parameters:
+  AllowedOrigin:
+    Type: String
+    Default: http://localhost:3000
+    AllowedPattern: "^https?://[^/]+$"
+    Description: >-
+      Origin the frontend is served from (scheme, host and optional port, no trailing slash),
+      e.g. https://gallery.example.com. Used for API Gateway, Photos API and S3 CORS.
+
 Globals:
   Function:
     Runtime: dotnet10
@@ -33,7 +42,7 @@ Resources:
         RestrictPublicBuckets: true
       CorsConfiguration:
         CorsRules:
-          - AllowedOrigins: ["http://localhost:3000"]
+          - AllowedOrigins: [!Ref AllowedOrigin]
             AllowedMethods: [POST, GET]
             AllowedHeaders: ["*"]
             ExposedHeaders: [ETag]
@@ -64,13 +73,56 @@ Resources:
             - { AttributeName: GSI1SK, KeyType: RANGE }
           Projection: { ProjectionType: ALL }
 
+  # Identity: users sign up with their email; the API trusts the `sub` claim of the ID/access token.
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-users"
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 10
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub "${AWS::StackName}-web"
+      # Public SPA client: no secret, SRP sign-in, short-lived tokens with refresh.
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      # Every route requires a valid Cognito JWT unless it opts out with `Authorizer: NONE`.
+      Auth:
+        DefaultAuthorizer: CognitoJwt
+        Authorizers:
+          CognitoJwt:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+              audience: [!Ref UserPoolClient]
       CorsConfiguration:
-        AllowOrigins: ["http://localhost:3000"]
-        AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
-        AllowHeaders: ["*"]
+        AllowOrigins: [!Ref AllowedOrigin]
+        AllowMethods: [GET, POST, PATCH, DELETE, OPTIONS]
+        # x-debug-user-id only matters locally (sam local + LocalStack); the functions ignore it in AWS.
+        AllowHeaders: [authorization, content-type, x-debug-user-id]
+        MaxAge: 600
 
   UploadFunction:
     Type: AWS::Serverless::Function
@@ -151,6 +203,7 @@ Resources:
       Environment:
         Variables:
           POWERTOOLS_SERVICE_NAME: photos-api
+          Cors__AllowedOrigins__0: !Ref AllowedOrigin
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PhotoTable
@@ -163,11 +216,33 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /api/{proxy+}
             Method: ANY
+        # Public routes: share links are opened by people without an account.
+        SharedAlbum:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/shared/{code}
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/health
+            Method: GET
+            Auth:
+              Authorizer: NONE
 
 Outputs:
   ApiUrl:
+    Description: Base URL for NEXT_PUBLIC_API_URL / NEXT_PUBLIC_UPLOAD_URL
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
   BucketName:
     Value: !Ref PhotoBucket
   TableName:
     Value: !Ref PhotoTable
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
