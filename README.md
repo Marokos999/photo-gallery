@@ -1,6 +1,7 @@
 # Photo Gallery
 
 [![CI](https://github.com/Marokos999/photo-gallery/actions/workflows/ci.yml/badge.svg)](https://github.com/Marokos999/photo-gallery/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Marokos999/photo-gallery/actions/workflows/codeql.yml/badge.svg)](https://github.com/Marokos999/photo-gallery/actions/workflows/codeql.yml)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs)
 ![AWS Lambda](https://img.shields.io/badge/AWS-Lambda%20%C2%B7%20S3%20%C2%B7%20DynamoDB-FF9900?logo=amazonwebservices)
@@ -92,12 +93,14 @@ sequenceDiagram
 | Storage | **Amazon S3** — originals and WebP variants, presigned URLs |
 | Database | **Amazon DynamoDB** — single-table design, GSI1, TTL, transactions, batch writes |
 | AWS SDK | AWS SDK for .NET **v4** |
+| Serialization | `System.Text.Json` **source generators** for Lambda events and API contracts (no reflection on cold start) |
+| Observability | **Powertools for AWS Lambda** — structured JSON logs, CloudWatch EMF metrics, X-Ray tracing |
 | Frontend | **Next.js 16** (App Router, static export), **React 19** + React Compiler, **TanStack Query 5**, **Tailwind CSS 4** |
 | UI libraries | `react-dropzone`, `yet-another-react-lightbox` |
 | Infrastructure as code | **AWS SAM** (`template.yaml`) |
 | Local development | **LocalStack** (S3, DynamoDB, SQS), `sam local` |
-| Testing | **xUnit v3** on Microsoft.Testing.Platform, `WebApplicationFactory`, LocalStack integration tests |
-| CI | GitHub Actions — build, tests, lint, formatting and frontend build |
+| Testing | **xUnit v3** on Microsoft.Testing.Platform, `WebApplicationFactory`, LocalStack integration tests; **Vitest** + Testing Library; **Playwright** E2E |
+| CI | GitHub Actions — build, tests with coverage summary, lint, formatting, E2E; **CodeQL** and **Dependabot** |
 
 ## Data model
 
@@ -194,10 +197,25 @@ Open <http://localhost:3000>.
 ## Tests
 
 ```bash
-dotnet test                        # 118 tests; integration tests run when LocalStack is up, otherwise they are skipped
+dotnet test                        # 122 tests; integration tests run when LocalStack is up, otherwise they are skipped
+dotnet test --coverage --coverage-output-format cobertura --coverage-settings tests/CodeCoverage.config.xml
+
+npm test --prefix frontend          # Vitest: lib and component tests (jsdom)
+npm run build --prefix frontend
+npm run test:e2e --prefix frontend  # Playwright smoke tests against the static export, API mocked
 npm run lint --prefix frontend
 npm run format:check --prefix frontend
 ```
+
+The Playwright suite serves the real `out/` export and fakes the API per test with `page.route`, so it needs
+no AWS, LocalStack or backend process. Run `npx playwright install chromium` once before the first run.
+
+### Observability
+
+Every Lambda uses Powertools: JSON logs carry the request id, cold start and (in AWS) the X-Ray trace id;
+custom metrics in the `PhotoGallery` namespace — `UploadUrlsIssued`, `PhotosProcessed`, `PhotosFailed`,
+`OriginalBytes`, `ExpiredUploadsCleaned` and `ColdStart` — are written as CloudWatch EMF, so they need no
+extra API calls. X-Ray instrumentation of the AWS SDK is switched off under LocalStack and `sam local`.
 
 ## Design decisions
 

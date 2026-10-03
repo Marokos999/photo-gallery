@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      aws:
+        patterns: ["AWS*", "Amazon.*"]
+      testing:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "Microsoft.Testing.*", "Microsoft.AspNetCore.Mvc.Testing"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      next-react:
+        patterns: ["next", "eslint-config-next", "react", "react-dom", "@types/react*", "babel-plugin-react-compiler"]
+      testing:
+        patterns: ["vitest", "@vitest/*", "@testing-library/*", "jsdom", "@playwright/test"]
+      tooling:
+        patterns: ["eslint", "prettier*", "tailwindcss", "@tailwindcss/*", "typescript", "@types/node"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
