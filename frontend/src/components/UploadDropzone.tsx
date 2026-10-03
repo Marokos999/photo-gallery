@@ -38,7 +38,7 @@ export function UploadDropzone({ albumId, caption, tags }: UploadDropzoneProps) 
 
     try {
       const ticket = await api.requestUpload({ fileName: file.name, contentType: file.type, albumId, caption, tags });
-      await uploadFile(ticket.uploadUrl, file, (progress) => update(id, { progress }));
+      await uploadFile(ticket, file, (progress) => update(id, { progress }));
       update(id, { status: "done", progress: 1 });
       // The new photo shows up as "Processing…"; the album page polls until it is ready.
       await queryClient.invalidateQueries({ queryKey: ["photos", albumId] });

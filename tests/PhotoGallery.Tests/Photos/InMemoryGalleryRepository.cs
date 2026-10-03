@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Amazon.DynamoDBv2.Model;
+using PhotoGallery.Core;
 using PhotoGallery.Core.Models;
 using PhotoGallery.Core.Persistence;
 
@@ -40,6 +41,28 @@ internal sealed class InMemoryGalleryRepository : IGalleryRepository
     public Task<IReadOnlyList<Photo>> ListPhotosAsync(string userId, string albumId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Photo>>(
             _photos.Values.Where(p => p.UserId == userId && p.AlbumId == albumId).ToList());
+
+    public Task<PhotoPage> ListPhotosPageAsync(
+        string userId, string albumId, int limit, string? cursor, CancellationToken ct = default)
+    {
+        var prefix = Keys.PhotosInAlbumSkPrefix(albumId);
+        string? after = null;
+        if (cursor is not null && !PageCursor.TryDecode(cursor, prefix, out after))
+            throw new ArgumentException("Cursor does not belong to this album.", nameof(cursor));
+
+        // Same ordering as DynamoDB: sort key descending (UUIDv7 ids, newest first).
+        var ordered = _photos.Values
+            .Where(p => p.UserId == userId && p.AlbumId == albumId)
+            .Select(p => (SortKey: Keys.PhotoSk(albumId, p.PhotoId), Photo: p))
+            .OrderByDescending(x => x.SortKey, StringComparer.Ordinal)
+            .SkipWhile(x => after is not null && string.CompareOrdinal(x.SortKey, after) >= 0)
+            .Take(limit + 1)
+            .ToList();
+
+        var page = ordered.Take(limit).ToList();
+        var nextCursor = ordered.Count > limit ? PageCursor.Encode(page[^1].SortKey) : null;
+        return Task.FromResult(new PhotoPage(page.Select(x => x.Photo).ToList(), nextCursor));
+    }
 
     public Task<bool> MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default)
     {

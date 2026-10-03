@@ -71,7 +71,9 @@ public class UploadFunctionTests
         Assert.Equal(PhotoStatus.Pending, photo.Status);
         Assert.Equal($"originals/user-1/{_albumId}/{body.PhotoId}/My-Photo.jpg", photo.OriginalKey);
         Assert.Equal(photo.OriginalKey, body.Key);
-        Assert.Contains("contentType=image/jpeg", body.UploadUrl);
+        Assert.Equal("https://signed.test/bucket", body.UploadUrl);
+        Assert.Equal("image/jpeg", body.UploadFields["Content-Type"]);
+        Assert.Equal(photo.OriginalKey, body.UploadFields["key"]);
         Assert.Equal(Now.AddMinutes(5), body.ExpiresAt);
         Assert.Equal(["beach"], photo.Tags);
     }

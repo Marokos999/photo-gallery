@@ -226,4 +226,31 @@ public class DynamoGalleryRepositoryTests
         Assert.Null(cleared!.Caption);
         Assert.Empty(cleared.Tags);
     }
+
+    [Fact]
+    public async Task ListPhotosPage_PagesNewestFirst_WithoutDuplicates()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Paged");
+        await _repository.CreateAlbumAsync(album, Ct);
+        var created = new List<string>();
+        for (var i = 0; i < 7; i++)
+        {
+            var photo = NewPhoto(album.AlbumId);
+            await _repository.CreatePhotoAsync(photo, Ct);
+            created.Add(photo.PhotoId);
+            await Task.Delay(2, Ct); // distinct UUIDv7 milliseconds
+        }
+
+        var received = new List<string>();
+        string? cursor = null;
+        do
+        {
+            var page = await _repository.ListPhotosPageAsync(_userId, album.AlbumId, 3, cursor, Ct);
+            received.AddRange(page.Items.Select(p => p.PhotoId));
+            cursor = page.NextCursor;
+        } while (cursor is not null);
+
+        Assert.Equal(Enumerable.Reverse(created), received);
+    }
 }

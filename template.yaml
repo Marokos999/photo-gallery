@@ -30,7 +30,7 @@ Resources:
       CorsConfiguration:
         CorsRules:
           - AllowedOrigins: ["http://localhost:3000"]
-            AllowedMethods: [PUT, GET]
+            AllowedMethods: [POST, GET]
             AllowedHeaders: ["*"]
             ExposedHeaders: [ETag]
             MaxAge: 3000

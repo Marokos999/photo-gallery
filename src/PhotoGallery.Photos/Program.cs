@@ -21,7 +21,8 @@ builder.Services.AddSingleton<IGalleryRepository, DynamoGalleryRepository>();
 builder.Services.AddSingleton<IUrlSigner>(sp =>
 {
     var options = sp.GetRequiredService<GalleryOptions>();
-    return new S3UrlSigner(AwsClientFactory.CreateS3Presigner(options), options);
+    var time = sp.GetRequiredService<TimeProvider>();
+    return new CachingUrlSigner(new S3UrlSigner(AwsClientFactory.CreateS3Presigner(options), options, time), time);
 });
 builder.Services.AddSingleton(sp => AwsClientFactory.CreateS3(sp.GetRequiredService<GalleryOptions>()));
 builder.Services.AddSingleton<IPhotoStorage, S3PhotoStorage>();

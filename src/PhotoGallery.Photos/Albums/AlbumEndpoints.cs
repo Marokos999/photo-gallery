@@ -11,8 +11,9 @@ namespace PhotoGallery.Photos.Albums;
 public static class AlbumEndpoints
 {
     private const int MaxNameLength = 100;
+    private const int DefaultPageSize = 60;
+    private const int MaxPageSize = 100;
 
-    private static readonly TimeSpan UrlLifetime = TimeSpan.FromHours(1);
 
     public static RouteGroupBuilder MapAlbumEndpoints(this RouteGroupBuilder api)
     {
@@ -77,7 +78,6 @@ public static class AlbumEndpoints
       ClaimsPrincipal user,
       IGalleryRepository repo,
       IUrlSigner signer,
-      TimeProvider time,
       CancellationToken ct
     )
     {
@@ -87,29 +87,45 @@ public static class AlbumEndpoints
 
         return album is null
                ? TypedResults.NotFound()
-               : TypedResults.Ok(await album.ToResponseAsync(signer, time.GetUtcNow().Add(UrlLifetime)));
+               : TypedResults.Ok(await album.ToResponseAsync(signer));
     }
 
-    private static async Task<Results<Ok<List<PhotoResponse>>, NotFound>> ListPhotos(
-            string albumId,
-            ClaimsPrincipal user,
-            IGalleryRepository repository,
-            IUrlSigner signer,
-            TimeProvider time,
-            CancellationToken ct)
+    private static async Task<Results<Ok<PhotoPageResponse>, NotFound, ValidationProblem>> ListPhotos(
+        string albumId,
+        int? limit,
+        string? cursor,
+        ClaimsPrincipal user,
+        IGalleryRepository repository,
+        IUrlSigner signer,
+        CancellationToken ct)
     {
+        if (limit is < 1 or > MaxPageSize)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["limit"] = [$"Must be between 1 and {MaxPageSize}."]
+            });
+        }
+
+        if (cursor is not null && !PageCursor.TryDecode(cursor, Keys.PhotosInAlbumSkPrefix(albumId), out _))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["cursor"] = ["Invalid cursor."]
+            });
+        }
+
         var userId = user.GetUserId();
         if (!IdFormats.IsEntityId(albumId) || await repository.GetAlbumAsync(userId, albumId, ct) is null)
             return TypedResults.NotFound();
 
-        var photos = await repository.ListPhotosAsync(userId, albumId, ct);
-        var expiresAt = time.GetUtcNow().Add(UrlLifetime);
+        var page = await repository.ListPhotosPageAsync(userId, albumId, limit ?? DefaultPageSize, cursor, ct);
 
-        var response = new List<PhotoResponse>(photos.Count);
-        foreach (var photo in photos.OrderByDescending(p => p.CreatedAt))
-            response.Add(await photo.ToResponseAsync(signer, expiresAt));
+        var items = new List<PhotoResponse>(page.Items.Count);
+        foreach (var photo in page.Items)
+            items.Add(await photo.ToResponseAsync(signer));
 
-        return TypedResults.Ok(response);
+        return TypedResults.Ok(new PhotoPageResponse(items, page.NextCursor));
     }
 
 
@@ -151,14 +167,13 @@ public static class AlbumEndpoints
 
 
     private static async Task<Ok<List<AlbumResponse>>> ListAlbums(ClaimsPrincipal user, IGalleryRepository repo,
-     IUrlSigner signer, TimeProvider time, CancellationToken ct)
+     IUrlSigner signer, CancellationToken ct)
     {
         var albums = await repo.ListAlbumsAsync(user.GetUserId(), ct);
-        var expiresAt = time.GetUtcNow().Add(UrlLifetime);
         var response = new List<AlbumResponse>(albums.Count);
 
         foreach (var album in albums.OrderByDescending(a => a.CreatedAt))
-            response.Add(await album.ToResponseAsync(signer, expiresAt));
+            response.Add(await album.ToResponseAsync(signer));
 
         return TypedResults.Ok(response);
     }

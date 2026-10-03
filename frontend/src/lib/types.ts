@@ -20,6 +20,12 @@ export interface Photo {
   previewUrl: string | null;
 }
 
+export interface PhotoPage {
+  items: Photo[];
+  /** Pass back as `cursor` to get the next (older) page; null on the last page. */
+  nextCursor: string | null;
+}
+
 export interface Share {
   code: string;
   expiresAt: string;
@@ -52,6 +58,8 @@ export interface UploadTicket {
   photoId: string;
   key: string;
   uploadUrl: string;
+  /** Presigned POST policy fields; must be sent before the file. */
+  uploadFields: Record<string, string>;
   expiresAt: string;
 }
 export interface PhotoDetails {

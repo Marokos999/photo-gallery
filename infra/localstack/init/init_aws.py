@@ -37,7 +37,7 @@ def create_bucket() -> None:
             "CORSRules": [
                 {
                     "AllowedOrigins": ["http://localhost:3000"],
-                    "AllowedMethods": ["PUT", "GET"],
+                    "AllowedMethods": ["POST", "GET"],
                     "AllowedHeaders": ["*"],
                     "ExposeHeaders": ["ETag"],
                     "MaxAgeSeconds": 3000,

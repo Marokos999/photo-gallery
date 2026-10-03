@@ -12,7 +12,6 @@ public static class ShareEndpoints
 {
     private const int DefaultExpiryDays = 7;
     private const int MaxExpiryDays = 30;
-    private static readonly TimeSpan UrlLifetime = TimeSpan.FromHours(1);
 
     public static RouteGroupBuilder MapShareEndpoints(this RouteGroupBuilder api)
     {
@@ -77,11 +76,10 @@ public static class ShareEndpoints
         if (album is null) return TypedResults.NotFound();
 
         var photos = await repo.ListPhotosAsync(share.OwnerUserId, share.AlbumId, ct);
-        var urlsExpireAt = now.Add(UrlLifetime);
 
         var response = new List<SharedPhotoResponse>();
         foreach (var photo in photos.Where(p => p.Status == PhotoStatus.Ready).OrderByDescending(p => p.CreatedAt))
-            response.Add(await photo.ToSharedResponseAsync(signer, urlsExpireAt));
+            response.Add(await photo.ToSharedResponseAsync(signer));
 
         return TypedResults.Ok(new SharedAlbumResponse(album.Name, share.ExpiresAt, response));
     }

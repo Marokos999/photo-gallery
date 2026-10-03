@@ -40,3 +40,5 @@ public sealed record SharedPhotoResponse(
 public sealed record RenameAlbumRequest(string? Name);
 
 public sealed record UpdatePhotoRequest(string? Caption, IReadOnlyList<string>? Tags);
+
+public sealed record PhotoPageResponse(IReadOnlyList<PhotoResponse> Items, string? NextCursor);

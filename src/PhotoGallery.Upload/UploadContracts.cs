@@ -7,6 +7,11 @@ public sealed record UploadRequest(
     string? Caption,
     IReadOnlyList<string>? Tags);
 
-public sealed record UploadResponse(string PhotoId, string Key, string UploadUrl, DateTimeOffset ExpiresAt);
+public sealed record UploadResponse(
+    string PhotoId,
+    string Key,
+    string UploadUrl,
+    IReadOnlyDictionary<string, string> UploadFields,
+    DateTimeOffset ExpiresAt);
 
 public sealed record ErrorResponse(string Error);

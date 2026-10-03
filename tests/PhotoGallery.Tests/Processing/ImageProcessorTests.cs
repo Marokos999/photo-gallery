@@ -65,4 +65,26 @@ public class ImageProcessorTests
 
         await Assert.ThrowsAnyAsync<ImageFormatException>(() => _processor.ProcessAsync(input, Ct));
     }
+
+    [Fact]
+    public async Task ImageOverPixelLimit_IsRejectedBeforeDecoding()
+    {
+        var processor = new ImageProcessor(maxPixels: 100 * 100);
+        using var input = TestImages.CreateJpeg(200, 200);
+
+        var ex = await Assert.ThrowsAsync<ImageTooLargeException>(() => processor.ProcessAsync(input, Ct));
+
+        Assert.Contains("200x200", ex.Message);
+    }
+
+    [Fact]
+    public async Task ImageAtPixelLimit_IsProcessed()
+    {
+        var processor = new ImageProcessor(maxPixels: 200 * 100);
+        using var input = TestImages.CreateJpeg(200, 100);
+
+        var result = await processor.ProcessAsync(input, Ct);
+
+        Assert.Equal((200, 100), (result.Width, result.Height));
+    }
 }

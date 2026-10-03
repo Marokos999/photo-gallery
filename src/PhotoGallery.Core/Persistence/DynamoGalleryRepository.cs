@@ -68,6 +68,41 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         return items.Select(ItemMapper.ToPhoto).ToList();
     }
 
+    public async Task<PhotoPage> ListPhotosPageAsync(
+        string userId, string albumId, int limit, string? cursor, CancellationToken ct = default)
+    {
+        var pk = Keys.UserPk(userId);
+        var prefix = Keys.PhotosInAlbumSkPrefix(albumId);
+
+        Dictionary<string, AttributeValue>? startKey = null;
+        if (cursor is not null)
+        {
+            if (!PageCursor.TryDecode(cursor, prefix, out var sortKey))
+                throw new ArgumentException("Cursor does not belong to this album.", nameof(cursor));
+            startKey = Key(pk, sortKey);
+        }
+
+        var response = await dynamoDB.QueryAsync(new QueryRequest
+        {
+            TableName = _table,
+            KeyConditionExpression = "PK = :pk AND begins_with(SK, :prefix)",
+            ExpressionAttributeValues = new()
+            {
+                [":pk"] = pk.ToS(),
+                [":prefix"] = prefix.ToS()
+            },
+            ExclusiveStartKey = startKey,
+            Limit = limit,
+            // Photo ids are UUIDv7, so descending sort key order is newest first.
+            ScanIndexForward = false
+        }, ct);
+
+        var photos = (response.Items ?? []).Select(ItemMapper.ToPhoto).ToList();
+        var nextCursor = response.LastEvaluatedKey is { Count: > 0 } last ? PageCursor.Encode(last["SK"].S) : null;
+
+        return new PhotoPage(photos, nextCursor);
+    }
+
     public async Task<bool> MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default)
     {
         try

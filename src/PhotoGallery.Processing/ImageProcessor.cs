@@ -11,11 +11,29 @@ public sealed class ImageProcessor
     public const int ThumbnailWidth = 400;
     public const int PreviewWidth = 1200;
 
+    /// <summary>50 megapixels: well above any phone camera, far below what would exhaust Lambda memory.</summary>
+    public const long DefaultMaxPixels = 50_000_000;
+
     private static readonly WebpEncoder Encoder = new WebpEncoder { Quality = 80 };
+
+    private readonly long _maxPixels;
+
+    public ImageProcessor(long maxPixels = DefaultMaxPixels) => _maxPixels = maxPixels;
 
     public async Task<ProcessedVariants> ProcessAsync(Stream input, CancellationToken ct = default)
     {
-        using var image = await Image.LoadAsync(input, ct);
+        // S3 response streams are forward-only; Identify + Load need to read the image twice.
+        using var buffered = new MemoryStream();
+        await input.CopyToAsync(buffered, ct);
+        buffered.Position = 0;
+
+        // Reads only the header: rejects decompression bombs before any pixel is allocated.
+        var info = await Image.IdentifyAsync(buffered, ct);
+        if ((long)info.Width * info.Height > _maxPixels)
+            throw new ImageTooLargeException(info.Width, info.Height, _maxPixels);
+
+        buffered.Position = 0;
+        using var image = await Image.LoadAsync(buffered, ct);
 
         image.Mutate(x => x.AutoOrient());
         image.Metadata.ExifProfile = null;

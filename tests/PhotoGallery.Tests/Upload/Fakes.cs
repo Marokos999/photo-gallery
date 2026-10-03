@@ -34,6 +34,10 @@ internal sealed class FakeGalleryRepository : IGalleryRepository
     public Task<IReadOnlyList<Photo>> ListPhotosAsync(string userId, string albumId, CancellationToken ct = default) =>
         throw new NotImplementedException();
 
+    public Task<PhotoPage> ListPhotosPageAsync(
+        string userId, string albumId, int limit, string? cursor, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
     public Task<bool> MarkPhotoReadyAsync(string userId, string albumId, string photoId, ProcessedImage image, CancellationToken ct = default) =>
         throw new NotImplementedException();
 
@@ -62,10 +66,12 @@ internal sealed class FakeGalleryRepository : IGalleryRepository
 
 internal sealed class FakeUrlSigner : IUrlSigner
 {
-    public Task<string> CreateUploadUrlAsync(string key, string contentType, DateTimeOffset expiresAt) =>
-        Task.FromResult($"https://signed.test/{key}?contentType={contentType}");
+    public Task<UploadForm> CreateUploadFormAsync(string key, string contentType, DateTimeOffset expiresAt) =>
+        Task.FromResult(new UploadForm(
+            "https://signed.test/bucket",
+            new Dictionary<string, string> { ["key"] = key, ["Content-Type"] = contentType }));
 
-    public Task<string> CreateDownloadUrlAsync(string key, DateTimeOffset expiresAt) =>
+    public Task<string> CreateDownloadUrlAsync(string key) =>
         Task.FromResult($"https://signed.test/{key}");
 }
 

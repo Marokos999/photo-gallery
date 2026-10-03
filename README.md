@@ -17,7 +17,7 @@ and a **Next.js 16** static frontend — runnable end to end on a laptop with **
 ## Features
 
 - **Albums** — create, rename and delete (deleting removes every photo and its S3 objects).
-- **Direct-to-S3 uploads** — drag and drop, presigned `PUT` URLs, per-file progress. Image bytes never pass through Lambda.
+- **Direct-to-S3 uploads** — drag and drop, presigned `POST` forms, per-file progress. Image bytes never pass through Lambda, and S3 itself enforces the 25 MB limit and content type.
 - **Automatic processing** — every upload is auto-oriented, stripped of EXIF/GPS metadata and converted to
   400 px and 1200 px **WebP** variants.
 - **Masonry grid + lightbox** — thumbnails in the grid, 1200 px previews in the lightbox.
@@ -44,7 +44,7 @@ flowchart LR
     browser -- "/api/albums …" --> api
     api --> upload
     api --> photos
-    browser -- "PUT (presigned URL)" --> s3
+    browser -- "POST (presigned form)" --> s3
     s3 -- "ObjectCreated originals/" --> processing
     processing -- "WebP 400 / 1200" --> s3
     upload --> ddb
@@ -66,8 +66,8 @@ sequenceDiagram
 
     B->>U: POST /api/photos/upload-url {fileName, contentType, albumId}
     U->>D: Put photo (Pending, 24 h TTL) + check album exists
-    U-->>B: presigned PUT URL (5 min, content-type bound)
-    B->>S3: PUT originals/{user}/{album}/{photo}/{file}
+    U-->>B: presigned POST form (5 min, ≤ 25 MB, content-type bound)
+    B->>S3: POST originals/{user}/{album}/{photo}/{file}
     S3->>P: ObjectCreated event
     P->>S3: GET original
     P->>P: auto-orient · strip metadata · resize · encode WebP
@@ -111,13 +111,13 @@ IDs are **UUIDv7** (`Guid.CreateVersion7`) — time-sortable, so sort keys come 
 
 | Method | Route | Auth | Description |
 | --- | --- | --- | --- |
-| `POST` | `/api/photos/upload-url` | ✅ | Validate, create a pending photo, return a presigned `PUT` URL |
+| `POST` | `/api/photos/upload-url` | ✅ | Validate, create a pending photo, return a presigned `POST` form |
 | `GET` | `/api/albums` | ✅ | List albums with presigned cover URLs |
 | `POST` | `/api/albums` | ✅ | Create an album |
 | `GET` | `/api/albums/{albumId}` | ✅ | Get one album |
 | `PATCH` | `/api/albums/{albumId}` | ✅ | Rename |
 | `DELETE` | `/api/albums/{albumId}` | ✅ | Delete the album, its photos and all S3 objects |
-| `GET` | `/api/albums/{albumId}/photos` | ✅ | Photos with presigned thumbnail/preview URLs (1 h) |
+| `GET` | `/api/albums/{albumId}/photos?limit=&cursor=` | ✅ | One page of photos (newest first) with presigned thumbnail/preview URLs |
 | `PATCH` | `/api/albums/{albumId}/photos/{photoId}` | ✅ | Update caption and tags |
 | `DELETE` | `/api/albums/{albumId}/photos/{photoId}` | ✅ | Delete a photo and its S3 objects |
 | `POST` | `/api/albums/{albumId}/share` | ✅ | Create a share link (default 7 days, max 30) |
@@ -131,7 +131,7 @@ Another user's album always returns **404**, never 403, so album IDs cannot be p
 photo-gallery/
 ├── src/
 │   ├── PhotoGallery.Core/          # models, keys, DynamoDB repository, S3 signing/storage
-│   ├── PhotoGallery.Upload/        # UploadFunction — presigned PUT URLs
+│   ├── PhotoGallery.Upload/        # UploadFunction — presigned POST forms
 │   ├── PhotoGallery.Processing/    # ProcessingFunction — ImageSharp → WebP
 │   └── PhotoGallery.Photos/        # PhotosFunction — ASP.NET Minimal API
 ├── tests/PhotoGallery.Tests/       # unit, API (WebApplicationFactory) and LocalStack integration tests
@@ -185,7 +185,7 @@ Open <http://localhost:3000>.
 ## Tests
 
 ```bash
-dotnet test                        # 82 tests; integration tests run when LocalStack is up, otherwise they are skipped
+dotnet test                        # 96 tests; integration tests run when LocalStack is up, otherwise they are skipped
 npm run lint --prefix frontend
 npm run format:check --prefix frontend
 ```
@@ -194,7 +194,10 @@ npm run format:check --prefix frontend
 
 | Decision | Why |
 | --- | --- |
-| **Presigned URLs, direct browser ↔ S3** | Lambda never handles image bytes: no API Gateway 10 MB limit, no Lambda timeout risk, cheaper. The upload URL is bound to the content type. |
+| **Presigned POST, direct browser → S3** | Lambda never handles image bytes: no API Gateway 10 MB limit, no Lambda timeout risk, cheaper. The POST policy makes S3 reject files over 25 MB or with another content type — a presigned PUT cannot limit size. |
+| **Stable download URLs** | Presigned URLs embed the signing time, so re-signing on every poll would make the browser re-download every thumbnail. URLs are reused per object for 45 minutes. |
+| **Cursor pagination** | Albums load 60 photos at a time (infinite scroll); the cursor is the last sort key, validated against the album. |
+| **Pixel limit before decoding** | `Image.Identify` reads only the header and rejects images over 50 MP, so a small "decompression bomb" file cannot exhaust Lambda memory. |
 | **S3 event → processing Lambda** | Uploading returns immediately; thumbnails are generated asynchronously while the UI polls. |
 | **Idempotent processing** | S3 delivers events *at least once*. A conditional `Pending → Ready` transaction guarantees a photo is counted once, and duplicate events skip the download entirely. |
 | **Pending photos expire (TTL)** | A photo record is created before the upload. If the upload never happens, DynamoDB TTL removes it after 24 h. |

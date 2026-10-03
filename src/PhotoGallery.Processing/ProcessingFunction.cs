@@ -5,6 +5,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using PhotoGallery.Core;
 using PhotoGallery.Core.Persistence;
+using PhotoGallery.Core.Storage;
 using SixLabors.ImageSharp;
 using PhotoGallery.Core.Models;
 
@@ -13,7 +14,6 @@ namespace PhotoGallery.Processing;
 
 public sealed class ProcessingFunction
 {
-    private const long MaxOriginalBytes = 25 * 1024 * 1024;
 
     private readonly IGalleryRepository repo;
     private readonly IAmazonS3 s3;
@@ -65,7 +65,7 @@ public sealed class ProcessingFunction
             return;
         }
 
-        if (s3Object.Size > MaxOriginalBytes)
+        if (s3Object.Size > UploadLimits.MaxFileBytes)
         {
             logger.LogWarning("Photo {PhotoId} is too large ({Size} bytes)", parts.PhotoId, s3Object.Size);
             await repo.MarkPhotoFailedAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
@@ -79,10 +79,10 @@ public sealed class ProcessingFunction
             using var original = await s3.GetObjectAsync(options.BucketName, key);
             variants = await processor.ProcessAsync(original.ResponseStream);
         }
-        catch (ImageFormatException ex)
+        catch (Exception ex) when (ex is ImageFormatException or ImageTooLargeException)
         {
             // Not retryable: the same bytes will fail again. Record it so the UI stops waiting.
-            logger.LogError(ex, "Photo {PhotoId} is not a supported image", parts.PhotoId);
+            logger.LogError(ex, "Photo {PhotoId} was rejected: {Reason}", parts.PhotoId, ex.Message);
             await repo.MarkPhotoFailedAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
             return;
         }

@@ -76,11 +76,11 @@ public sealed class UploadFunction
         }
 
         var expiresAt = now.Add(UrlLifetime);
-        var uploadUrl = await _signer.CreateUploadUrlAsync(photo.OriginalKey, upload.ContentType, expiresAt);
+        var form = await _signer.CreateUploadFormAsync(photo.OriginalKey, upload.ContentType, expiresAt);
 
         context.Logger.LogInformation("Upload URL created for photo {PhotoId} in album {AlbumId}", photoId, upload.AlbumId);
 
-        return HttpResults.Ok(new UploadResponse(photoId, photo.OriginalKey, uploadUrl, expiresAt));
+        return HttpResults.Ok(new UploadResponse(photoId, photo.OriginalKey, form.Url, form.Fields, expiresAt));
     }
 
     private static UploadRequest? ReadBody(APIGatewayHttpApiV2ProxyRequest request)

@@ -78,11 +78,11 @@ public class AlbumEndpointsTests(PhotosApiFactory factory) : IClassFixture<Photo
         await factory.Repository.MarkPhotoReadyAsync(_userId, album.AlbumId, ready.PhotoId,
             new ProcessedImage(S3Keys.Thumbnail(ready.PhotoId), S3Keys.Preview(ready.PhotoId), 800, 600), Ct);
 
-        var photos = await factory.CreateClientFor(_userId)
-            .GetFromJsonAsync<List<PhotoResponse>>($"/api/albums/{album.AlbumId}/photos", Json, Ct);
+        var page = await factory.CreateClientFor(_userId)
+            .GetFromJsonAsync<PhotoPageResponse>($"/api/albums/{album.AlbumId}/photos", Json, Ct);
 
-        var readyResponse = Assert.Single(photos!, p => p.PhotoId == ready.PhotoId);
-        var pendingResponse = Assert.Single(photos!, p => p.PhotoId == pending.PhotoId);
+        var readyResponse = Assert.Single(page!.Items, p => p.PhotoId == ready.PhotoId);
+        var pendingResponse = Assert.Single(page.Items, p => p.PhotoId == pending.PhotoId);
         Assert.Equal(PhotoStatus.Ready, readyResponse.Status);
         Assert.Contains(S3Keys.Thumbnail(ready.PhotoId), readyResponse.ThumbnailUrl);
         Assert.Null(pendingResponse.ThumbnailUrl);

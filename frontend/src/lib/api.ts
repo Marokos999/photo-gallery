@@ -1,5 +1,5 @@
 import { config } from "./config";
-import type { Album, Photo, PhotoDetails, Share, SharedAlbum, UploadRequest, UploadTicket } from "./types";
+import type { Album, PhotoDetails, PhotoPage, Share, SharedAlbum, UploadRequest, UploadTicket } from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -10,6 +10,8 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+
+export const PHOTO_PAGE_SIZE = 60;
 
 function authHeaders(): Record<string, string> {
   return config.debugUserId ? { "x-debug-user-id": config.debugUserId } : {};
@@ -43,7 +45,12 @@ export const api = {
 
   deleteAlbum: (albumId: string) => request<void>(config.apiUrl, `/api/albums/${albumId}`, { method: "DELETE" }),
 
-  listPhotos: (albumId: string) => request<Photo[]>(config.apiUrl, `/api/albums/${albumId}/photos`),
+  listPhotos: (albumId: string, cursor?: string) =>
+    request<PhotoPage>(
+      config.apiUrl,
+      `/api/albums/${albumId}/photos?limit=${PHOTO_PAGE_SIZE}` +
+        (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""),
+    ),
 
   updatePhoto: (albumId: string, photoId: string, details: PhotoDetails) =>
     request<void>(config.apiUrl, `/api/albums/${albumId}/photos/${photoId}`, {
@@ -71,14 +78,21 @@ export const api = {
 };
 
 /**
- * PUTs a file straight to S3 using a presigned URL.
+ * Uploads a file straight to S3 with a presigned POST form. S3 enforces the policy (size, content type).
  * Uses XMLHttpRequest because fetch() still has no upload progress events.
  */
-export function uploadFile(uploadUrl: string, file: File, onProgress?: (fraction: number) => void): Promise<void> {
+export function uploadFile(
+  ticket: Pick<UploadTicket, "uploadUrl" | "uploadFields">,
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<void> {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(ticket.uploadFields)) form.append(name, value);
+  form.append("file", file); // S3 ignores every field after "file", so it must be last.
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", uploadUrl);
-    xhr.setRequestHeader("Content-Type", file.type);
+    xhr.open("POST", ticket.uploadUrl);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total);
     };
@@ -87,6 +101,6 @@ export function uploadFile(uploadUrl: string, file: File, onProgress?: (fraction
         ? resolve()
         : reject(new ApiError(xhr.status, `Upload failed with ${xhr.status}`));
     xhr.onerror = () => reject(new ApiError(0, "Upload failed: network error"));
-    xhr.send(file);
+    xhr.send(form);
   });
 }
