@@ -21,7 +21,7 @@ jobs:
       SixLaborsLicenseKey: ${{ secrets.SIXLABORS_LICENSE_KEY }}
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -73,7 +73,7 @@ jobs:
       NEXT_PUBLIC_API_URL: https://api.example.com
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v5
         with:

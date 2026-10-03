@@ -21,7 +21,7 @@ jobs:
         # build-mode none: CodeQL extracts the sources directly, no dotnet/npm build needed.
         language: [csharp, javascript-typescript, actions]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: github/codeql-action/init@v4
         with:
