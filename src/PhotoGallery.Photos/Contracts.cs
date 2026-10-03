@@ -45,3 +45,5 @@ public sealed record UpdatePhotoRequest(string? Caption, IReadOnlyList<string>? 
 public sealed record PhotoPageResponse(IReadOnlyList<PhotoResponse> Items, string? NextCursor);
 
 public sealed record ShareSummaryResponse(string Code, DateTimeOffset CreatedAt, DateTimeOffset? ExpiresAt, bool IsExpired);
+
+public sealed record HealthResponse(string Status);

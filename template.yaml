@@ -8,6 +8,7 @@ Globals:
     Architectures: [arm64]
     MemorySize: 1024
     Timeout: 30
+    Tracing: Active
     LoggingConfig:
       LogFormat: JSON
     Environment:
@@ -16,6 +17,8 @@ Globals:
         BUCKET_NAME: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
         LOCALSTACK_ENDPOINT: ""
         S3_PUBLIC_ENDPOINT: ""
+        POWERTOOLS_LOG_LEVEL: Information
+        POWERTOOLS_METRICS_NAMESPACE: PhotoGallery
 
 Resources:
   PhotoBucket:
@@ -73,6 +76,9 @@ Resources:
     Properties:
       CodeUri: src/PhotoGallery.Upload/
       Handler: PhotoGallery.Upload::PhotoGallery.Upload.UploadFunction::HandleAsync
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: photo-upload
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PhotoTable
@@ -91,6 +97,9 @@ Resources:
     Properties:
       CodeUri: src/PhotoGallery.Processing/
       Handler: PhotoGallery.Processing::PhotoGallery.Processing.ProcessingFunction::HandleAsync
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: photo-processing
       MemorySize: 2048
       Timeout: 60
       Policies:
@@ -114,6 +123,9 @@ Resources:
     Properties:
       CodeUri: src/PhotoGallery.Processing/
       Handler: PhotoGallery.Processing::PhotoGallery.Processing.ExpiredUploadCleanupFunction::HandleAsync
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: expired-upload-cleanup
       MemorySize: 256
       Policies:
         - S3CrudPolicy:
@@ -135,6 +147,9 @@ Resources:
     Properties:
       CodeUri: src/PhotoGallery.Photos/
       Handler: PhotoGallery.Photos
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: photos-api
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PhotoTable

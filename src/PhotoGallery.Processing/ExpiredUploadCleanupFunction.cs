@@ -1,5 +1,7 @@
 using Amazon.Lambda.Core;
 using Amazon.Lambda.DynamoDBEvents;
+using AWS.Lambda.Powertools.Logging;
+using AWS.Lambda.Powertools.Metrics;
 using PhotoGallery.Core;
 using PhotoGallery.Core.Models;
 using PhotoGallery.Core.Persistence;
@@ -30,6 +32,8 @@ public sealed class ExpiredUploadCleanupFunction
 
     public ExpiredUploadCleanupFunction(IPhotoStorage storage) => _storage = storage;
 
+    [Logging]
+    [Metrics(Namespace = Observability.MetricsNamespace, CaptureColdStart = true)]
     public async Task HandleAsync(DynamoDBEvent dynamoEvent, ILambdaContext context)
     {
         var objectKeys = new List<string>();
@@ -46,7 +50,8 @@ public sealed class ExpiredUploadCleanupFunction
                 continue;
 
             objectKeys.AddRange([originalKey, S3Keys.Thumbnail(photoId), S3Keys.Preview(photoId)]);
-            context.Logger.LogInformation("Pending upload {PhotoId} expired; removing its S3 objects", photoId);
+            Logger.LogInformation("Pending upload {PhotoId} expired; removing its S3 objects", photoId);
+            Metrics.AddMetric("ExpiredUploadsCleaned", 1, MetricUnit.Count);
         }
 
         if (objectKeys.Count > 0)

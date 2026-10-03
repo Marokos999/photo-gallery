@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Amazon.Lambda.AspNetCoreServer.Hosting" />
+    <PackageReference Include="AWS.Lambda.Powertools.Logging" />
   </ItemGroup>
 
 </Project>

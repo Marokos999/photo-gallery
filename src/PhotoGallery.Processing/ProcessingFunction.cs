@@ -3,13 +3,18 @@ using Amazon.Lambda.S3Events;
 using Amazon.Lambda.Serialization.SystemTextJson;
 using Amazon.S3;
 using Amazon.S3.Model;
+using AWS.Lambda.Powertools.Logging;
+using AWS.Lambda.Powertools.Metrics;
+using AWS.Lambda.Powertools.Tracing;
 using PhotoGallery.Core;
+using PhotoGallery.Core.Models;
 using PhotoGallery.Core.Persistence;
 using PhotoGallery.Core.Storage;
 using SixLabors.ImageSharp;
-using PhotoGallery.Core.Models;
+using Metrics = AWS.Lambda.Powertools.Metrics.Metrics;
 
-[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
+[assembly: LambdaSerializer(typeof(SourceGeneratorLambdaJsonSerializer<PhotoGallery.Processing.ProcessingJsonContext>))]
+
 namespace PhotoGallery.Processing;
 
 public sealed class ProcessingFunction
@@ -19,6 +24,12 @@ public sealed class ProcessingFunction
     private readonly IAmazonS3 s3;
     private readonly ImageProcessor processor;
     private readonly GalleryOptions options;
+
+    static ProcessingFunction()
+    {
+        if (Observability.IsRunningInLambda)
+            Tracing.RegisterForAllServices();
+    }
 
     public ProcessingFunction() : this(GalleryOptions.FromEnvironment())
     {
@@ -39,36 +50,41 @@ public sealed class ProcessingFunction
         this.options = options;
     }
 
+    [Logging(ClearState = true)]
+    [Metrics(Namespace = Observability.MetricsNamespace, CaptureColdStart = true)]
+    [Tracing]
     public async Task HandleAsync(S3Event s3Event, ILambdaContext context)
     {
         foreach (var record in s3Event.Records ?? [])
         {
-            await ProcessObjectAsync(record.S3.Object, context.Logger);
+            await ProcessObjectAsync(record.S3.Object);
         }
 
     }
 
-    private async Task ProcessObjectAsync(S3Event.S3ObjectEntity s3Object, ILambdaLogger logger)
+    private async Task ProcessObjectAsync(S3Event.S3ObjectEntity s3Object)
     {
         var key = s3Object.KeyDecoded;
 
         if (!S3Keys.TryParseOriginal(key, out var parts))
         {
-            logger.LogWarning("Ignoring object with unexpected key {Key}", key);
+            Logger.LogWarning("Ignoring object with unexpected key {Key}", key);
             return;
         }
+
+        Logger.AppendKey("photoId", parts.PhotoId);
 
         var existing = await repo.GetPhotoAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
         if (existing is not { Status: PhotoStatus.Pending })
         {
-            logger.LogInformation("Photo {PhotoId} is not pending, skipping", parts.PhotoId);
+            Logger.LogInformation("Photo {PhotoId} is not pending, skipping", parts.PhotoId);
             return;
         }
 
         if (s3Object.Size > UploadLimits.MaxFileBytes)
         {
-            logger.LogWarning("Photo {PhotoId} is too large ({Size} bytes)", parts.PhotoId, s3Object.Size);
-            await repo.MarkPhotoFailedAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
+            Logger.LogWarning("Photo {PhotoId} is too large ({Size} bytes)", parts.PhotoId, s3Object.Size);
+            await MarkFailedAsync(parts);
             return;
         }
 
@@ -82,8 +98,8 @@ public sealed class ProcessingFunction
         catch (Exception ex) when (ex is ImageFormatException or ImageTooLargeException)
         {
             // Not retryable: the same bytes will fail again. Record it so the UI stops waiting.
-            logger.LogError(ex, "Photo {PhotoId} was rejected: {Reason}", parts.PhotoId, ex.Message);
-            await repo.MarkPhotoFailedAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
+            Logger.LogError(ex, "Photo {PhotoId} was rejected: {Reason}", parts.PhotoId, ex.Message);
+            await MarkFailedAsync(parts);
             return;
         }
 
@@ -98,10 +114,20 @@ public sealed class ProcessingFunction
         await UploadWebpAsync(image.PreviewKey, variants.Preview);
 
         if (await repo.MarkPhotoReadyAsync(parts.UserId, parts.AlbumId, parts.PhotoId, image))
-            logger.LogInformation("Photo {PhotoId} processed ({Width}x{Height})", parts.PhotoId, variants.Width, variants.Height);
+        {
+            Logger.LogInformation("Photo {PhotoId} processed ({Width}x{Height})", parts.PhotoId, variants.Width, variants.Height);
+            Metrics.AddMetric("PhotosProcessed", 1, MetricUnit.Count);
+            Metrics.AddMetric("OriginalBytes", s3Object.Size, MetricUnit.Bytes);
+        }
         else
-            logger.LogWarning("Photo {PhotoId} was already processed or no longer exists", parts.PhotoId);
+            Logger.LogWarning("Photo {PhotoId} was already processed or no longer exists", parts.PhotoId);
 
+    }
+
+    private async Task MarkFailedAsync(OriginalKeyParts parts)
+    {
+        await repo.MarkPhotoFailedAsync(parts.UserId, parts.AlbumId, parts.PhotoId);
+        Metrics.AddMetric("PhotosFailed", 1, MetricUnit.Count);
     }
 
     private Task UploadWebpAsync(string key, byte[] content) =>

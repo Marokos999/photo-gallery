@@ -65,7 +65,7 @@ public class UploadFunctionTests
         var response = await Handle(Request(ValidBody()));
 
         Assert.Equal(200, response.StatusCode);
-        var body = JsonSerializer.Deserialize<UploadResponse>(response.Body, HttpResults.JsonOptions)!;
+        var body = JsonSerializer.Deserialize(response.Body, UploadJsonContext.Default.UploadResponse)!;
         var photo = Assert.Single(_repository.CreatedPhotos);
 
         Assert.Equal(PhotoStatus.Pending, photo.Status);
@@ -102,7 +102,7 @@ public class UploadFunctionTests
 
     private static APIGatewayHttpApiV2ProxyRequest Request(UploadRequest body, string? userId = "user-1") => new()
     {
-        Body = JsonSerializer.Serialize(body, HttpResults.JsonOptions),
+        Body = JsonSerializer.Serialize(body, UploadJsonContext.Default.UploadRequest),
         Headers = userId is null
             ? new Dictionary<string, string>()
             : new Dictionary<string, string> { [UserResolver.DebugUserHeader] = userId }

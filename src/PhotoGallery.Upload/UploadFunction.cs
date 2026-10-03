@@ -4,18 +4,27 @@ using Amazon.DynamoDBv2.Model;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.SystemTextJson;
+using AWS.Lambda.Powertools.Logging;
+using AWS.Lambda.Powertools.Metrics;
+using AWS.Lambda.Powertools.Tracing;
 using PhotoGallery.Core;
 using PhotoGallery.Core.Models;
 using PhotoGallery.Core.Persistence;
 using PhotoGallery.Core.Storage;
 
-[assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
+[assembly: LambdaSerializer(typeof(SourceGeneratorLambdaJsonSerializer<PhotoGallery.Upload.UploadLambdaJsonContext>))]
 
 namespace PhotoGallery.Upload;
 
 public sealed class UploadFunction
 {
     private static readonly TimeSpan UrlLifetime = TimeSpan.FromMinutes(5);
+
+    static UploadFunction()
+    {
+        if (Observability.IsRunningInLambda)
+            Tracing.RegisterForAllServices();
+    }
 
     private readonly IGalleryRepository _repository;
     private readonly IUrlSigner _signer;
@@ -42,6 +51,9 @@ public sealed class UploadFunction
         _time = time;
     }
 
+    [Logging(CorrelationIdPath = CorrelationIdPaths.ApiGatewayHttp)]
+    [Metrics(Namespace = Observability.MetricsNamespace, CaptureColdStart = true)]
+    [Tracing]
     public async Task<APIGatewayHttpApiV2ProxyResponse> HandleAsync(
         APIGatewayHttpApiV2ProxyRequest request,
         ILambdaContext context)
@@ -78,7 +90,8 @@ public sealed class UploadFunction
         var expiresAt = now.Add(UrlLifetime);
         var form = await _signer.CreateUploadFormAsync(photo.OriginalKey, upload.ContentType, expiresAt);
 
-        context.Logger.LogInformation("Upload URL created for photo {PhotoId} in album {AlbumId}", photoId, upload.AlbumId);
+        Logger.LogInformation("Upload URL created for photo {PhotoId} in album {AlbumId}", photoId, upload.AlbumId);
+        Metrics.AddMetric("UploadUrlsIssued", 1, MetricUnit.Count);
 
         return HttpResults.Ok(new UploadResponse(photoId, photo.OriginalKey, form.Url, form.Fields, expiresAt));
     }
@@ -94,7 +107,7 @@ public sealed class UploadFunction
 
         try
         {
-            return JsonSerializer.Deserialize<UploadRequest>(json, HttpResults.JsonOptions);
+            return JsonSerializer.Deserialize(json, UploadJsonContext.Default.UploadRequest);
         }
         catch (JsonException)
         {

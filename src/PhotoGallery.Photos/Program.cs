@@ -1,8 +1,11 @@
 using System.Text.Json.Serialization;
+using Amazon.Lambda.Serialization.SystemTextJson;
+using AWS.Lambda.Powertools.Logging;
 using Microsoft.AspNetCore.Authentication;
 using PhotoGallery.Core;
 using PhotoGallery.Core.Persistence;
 using PhotoGallery.Core.Storage;
+using PhotoGallery.Photos;
 using PhotoGallery.Photos.Albums;
 using PhotoGallery.Photos.Auth;
 using PhotoGallery.Photos.Photos;
@@ -10,9 +13,18 @@ using PhotoGallery.Photos.Shares;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Structured JSON logs (cold start, request id, X-Ray trace id) when running in Lambda; plain console locally.
+if (Observability.IsRunningInLambda)
+    builder.Logging.ClearProviders().AddPowertoolsLogger();
 
-builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
-builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddAWSLambdaHosting(
+    LambdaEventSource.HttpApi,
+    new SourceGeneratorLambdaJsonSerializer<LambdaEventsJsonContext>());
+builder.Services.ConfigureHttpJsonOptions(o =>
+{
+    o.SerializerOptions.TypeInfoResolverChain.Insert(0, PhotosJsonContext.Default);
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 builder.Services.AddProblemDetails();
 
 builder.Services.AddSingleton(_ => GalleryOptions.FromEnvironment());
@@ -51,7 +63,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 var api = app.MapGroup("/api").RequireAuthorization();
-api.MapGet("/health", () => TypedResults.Ok(new { status = "ok" })).AllowAnonymous();
+api.MapGet("/health", () => TypedResults.Ok(new HealthResponse("ok"))).AllowAnonymous();
 api.MapAlbumEndpoints();
 api.MapPhotoEndpoints();
 api.MapShareEndpoints();
