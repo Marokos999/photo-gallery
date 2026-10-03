@@ -53,6 +53,12 @@ internal sealed class FakeGalleryRepository : IGalleryRepository
 
     public Task<Share?> GetShareAsync(string code, CancellationToken ct = default) => throw new NotImplementedException();
 
+    public Task<IReadOnlyList<Share>> ListSharesAsync(string userId, string albumId, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task<bool> DeleteShareAsync(string userId, string code, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
     public Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default) =>
         throw new NotImplementedException();
 

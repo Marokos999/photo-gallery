@@ -24,6 +24,12 @@ public interface IGalleryRepository
 
     Task<Share?> GetShareAsync(string code, CancellationToken ct = default);
 
+    /// <summary>Share links of an album owned by <paramref name="userId"/>, including expired ones not yet removed by TTL.</summary>
+    Task<IReadOnlyList<Share>> ListSharesAsync(string userId, string albumId, CancellationToken ct = default);
+
+    /// <summary>Revokes a share link. Returns false if it does not exist or belongs to someone else.</summary>
+    Task<bool> DeleteShareAsync(string userId, string code, CancellationToken ct = default);
+
     Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default);
 
     Task<IReadOnlyList<Photo>?> DeleteAlbumAsync(string userId, string albumId, CancellationToken ct = default);

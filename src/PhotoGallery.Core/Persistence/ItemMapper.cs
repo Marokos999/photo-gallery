@@ -8,7 +8,6 @@ public static class ItemMapper
     public const string AlbumType = "Album";
     public const string PhotoType = "Photo";
     public const string ShareType = "Share";
-    public const string AlbumGsiSk = "ALBUM";
     public static readonly TimeSpan PendingTtl = TimeSpan.FromHours(24);
     public static Dictionary<string, AttributeValue> ToItem(Album album)
     {
@@ -16,8 +15,6 @@ public static class ItemMapper
         {
             ["PK"] = Keys.UserPk(album.UserId).ToS(),
             ["SK"] = Keys.AlbumSk(album.AlbumId).ToS(),
-            ["GSI1PK"] = Keys.AlbumGsiPk(album.AlbumId).ToS(),
-            ["GSI1SK"] = AlbumGsiSk.ToS(),
             ["EntityType"] = AlbumType.ToS(),
             ["UserId"] = album.UserId.ToS(),
             ["AlbumId"] = album.AlbumId.ToS(),
@@ -48,8 +45,6 @@ public static class ItemMapper
         {
             ["PK"] = Keys.UserPk(photo.UserId).ToS(),
             ["SK"] = Keys.PhotoSk(photo.AlbumId, photo.PhotoId).ToS(),
-            ["GSI1PK"] = Keys.AlbumGsiPk(photo.AlbumId).ToS(),
-            ["GSI1SK"] = Keys.PhotoGsiSk(photo.PhotoId).ToS(),
             ["EntityType"] = PhotoType.ToS(),
             ["UserId"] = photo.UserId.ToS(),
             ["AlbumId"] = photo.AlbumId.ToS(),
@@ -94,6 +89,9 @@ public static class ItemMapper
         {
             ["PK"] = Keys.SharePk(share.Code).ToS(),
             ["SK"] = Keys.ShareSk.ToS(),
+            // GSI1: all share links of an album (list, revoke, delete with the album).
+            ["GSI1PK"] = Keys.AlbumGsiPk(share.AlbumId).ToS(),
+            ["GSI1SK"] = Keys.ShareGsiSk(share.Code).ToS(),
             ["EntityType"] = ShareType.ToS(),
             ["Code"] = share.Code.ToS(),
             ["OwnerUserId"] = share.OwnerUserId.ToS(),

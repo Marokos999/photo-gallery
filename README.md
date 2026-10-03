@@ -36,6 +36,7 @@ flowchart LR
         upload["UploadFunction<br/>λ .NET 10"]
         photos["PhotosFunction<br/>λ ASP.NET Minimal API"]
         processing["ProcessingFunction<br/>λ ImageSharp 4"]
+        cleanup["ExpiredUploadCleanupFunction<br/>λ DynamoDB Streams"]
         s3[("S3<br/>originals/ · thumbs/")]
         ddb[("DynamoDB<br/>single table + GSI1")]
     end
@@ -51,6 +52,8 @@ flowchart LR
     photos --> ddb
     processing --> ddb
     browser -. "GET (presigned URL)" .-> s3
+    ddb -. "TTL expiry (stream)" .-> cleanup
+    cleanup -- "delete orphaned objects" --> s3
 ```
 
 ### Upload flow
@@ -97,13 +100,13 @@ sequenceDiagram
 
 ## Data model
 
-One DynamoDB table (`PK` / `SK`) plus `GSI1`:
+One DynamoDB table (`PK` / `SK`) plus `GSI1`, which only indexes share links by album (photos and albums are not projected, so the bulk of writes pays for no index):
 
 | Entity | PK | SK | GSI1PK / GSI1SK | Notes |
 | --- | --- | --- | --- | --- |
-| Album | `USER#{userId}` | `ALBUM#{albumId}` | `ALBUM#{albumId}` / `ALBUM` | `Name`, `PhotoCount`, `CoverPhotoKey` |
-| Photo | `USER#{userId}` | `PHOTO#{albumId}#{photoId}` | `ALBUM#{albumId}` / `PHOTO#{photoId}` | `Status`, keys, size, caption, tags; `ExpiresAt` while pending |
-| Share | `SHARE#{code}` | `SHARE` | — | `OwnerUserId`, `AlbumId`, `ExpiresAt` (TTL) |
+| Album | `USER#{userId}` | `ALBUM#{albumId}` | — | `Name`, `PhotoCount`, `CoverPhotoKey` |
+| Photo | `USER#{userId}` | `PHOTO#{albumId}#{photoId}` | — | `Status`, keys, size, caption, tags; `ExpiresAt` while pending |
+| Share | `SHARE#{code}` | `SHARE` | `ALBUM#{albumId}` / `SHARE#{code}` | `OwnerUserId`, `AlbumId`, `ExpiresAt` (TTL) |
 
 IDs are **UUIDv7** (`Guid.CreateVersion7`) — time-sortable, so sort keys come back in creation order.
 
@@ -132,7 +135,7 @@ photo-gallery/
 ├── src/
 │   ├── PhotoGallery.Core/          # models, keys, DynamoDB repository, S3 signing/storage
 │   ├── PhotoGallery.Upload/        # UploadFunction — presigned POST forms
-│   ├── PhotoGallery.Processing/    # ProcessingFunction — ImageSharp → WebP
+│   ├── PhotoGallery.Processing/    # ProcessingFunction (ImageSharp → WebP) + expired-upload cleanup
 │   └── PhotoGallery.Photos/        # PhotosFunction — ASP.NET Minimal API
 ├── tests/PhotoGallery.Tests/       # unit, API (WebApplicationFactory) and LocalStack integration tests
 ├── tools/PhotoGallery.LocalProcessor/  # local stand-in for the S3 → Lambda trigger
@@ -185,7 +188,7 @@ Open <http://localhost:3000>.
 ## Tests
 
 ```bash
-dotnet test                        # 96 tests; integration tests run when LocalStack is up, otherwise they are skipped
+dotnet test                        # 111 tests; integration tests run when LocalStack is up, otherwise they are skipped
 npm run lint --prefix frontend
 npm run format:check --prefix frontend
 ```
@@ -200,7 +203,8 @@ npm run format:check --prefix frontend
 | **Pixel limit before decoding** | `Image.Identify` reads only the header and rejects images over 50 MP, so a small "decompression bomb" file cannot exhaust Lambda memory. |
 | **S3 event → processing Lambda** | Uploading returns immediately; thumbnails are generated asynchronously while the UI polls. |
 | **Idempotent processing** | S3 delivers events *at least once*. A conditional `Pending → Ready` transaction guarantees a photo is counted once, and duplicate events skip the download entirely. |
-| **Pending photos expire (TTL)** | A photo record is created before the upload. If the upload never happens, DynamoDB TTL removes it after 24 h. |
+| **Pending photos expire (TTL) + Streams cleanup** | A photo record is created before the upload. If it is never processed, DynamoDB TTL removes it after 24 h and a DynamoDB Streams consumer (filtered to TTL deletions only) deletes whatever reached S3 — no orphaned objects. |
+| **One rule set, two entry points** | Caption/tag normalization and the caller-identity rule live in Core and are shared by the upload Lambda and the Photos API. |
 | **Count on ready, not on upload** | `PhotoCount` only includes processed photos, so abandoned uploads never inflate it. |
 | **Auto-orient before stripping EXIF** | Phones store rotation in EXIF. Removing EXIF first would leave portraits sideways; GPS data is removed for privacy. |
 | **WebP variants** | Roughly 25–35 % smaller than JPEG at similar quality — less storage and transfer. |

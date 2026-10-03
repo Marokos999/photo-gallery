@@ -4,11 +4,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import { ApiError, api, uploadFile } from "@/lib/api";
+import { forEachWithLimit } from "@/lib/concurrency";
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const ACCEPTED_TYPES = { "image/jpeg": [], "image/png": [], "image/webp": [] };
+const MAX_PARALLEL_UPLOADS = 3;
 
-type UploadStatus = "uploading" | "done" | "error";
+type UploadStatus = "queued" | "uploading" | "done" | "error";
 
 interface UploadItem {
   id: string;
@@ -32,9 +34,8 @@ export function UploadDropzone({ albumId, caption, tags }: UploadDropzoneProps) 
     setUploads((current) => current.map((item) => (item.id === id ? { ...item, ...changes } : item)));
   }
 
-  async function uploadOne(file: File) {
-    const id = crypto.randomUUID();
-    setUploads((current) => [{ id, name: file.name, progress: 0, status: "uploading" }, ...current]);
+  async function uploadOne({ id, file }: { id: string; file: File }) {
+    update(id, { status: "uploading" });
 
     try {
       const ticket = await api.requestUpload({ fileName: file.name, contentType: file.type, albumId, caption, tags });
@@ -64,7 +65,12 @@ export function UploadDropzone({ albumId, caption, tags }: UploadDropzoneProps) 
         ...current,
       ]);
     }
-    void Promise.all(accepted.map(uploadOne));
+    const queued = accepted.map((file) => ({ id: crypto.randomUUID(), file }));
+    setUploads((current) => [
+      ...queued.map(({ id, file }): UploadItem => ({ id, name: file.name, progress: 0, status: "queued" })),
+      ...current,
+    ]);
+    void forEachWithLimit(queued, MAX_PARALLEL_UPLOADS, uploadOne);
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -102,6 +108,7 @@ export function UploadDropzone({ albumId, caption, tags }: UploadDropzoneProps) 
                         : "text-neutral-500"
                   }
                 >
+                  {item.status === "queued" && "Queued"}
                   {item.status === "uploading" && `${Math.round(item.progress * 100)}%`}
                   {item.status === "done" && "Uploaded"}
                   {item.status === "error" && item.error}

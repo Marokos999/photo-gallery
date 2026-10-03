@@ -133,6 +133,13 @@ internal sealed class InMemoryGalleryRepository : IGalleryRepository
     public Task<Share?> GetShareAsync(string code, CancellationToken ct = default) =>
         Task.FromResult(_shares.GetValueOrDefault(code));
 
+    public Task<IReadOnlyList<Share>> ListSharesAsync(string userId, string albumId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<Share>>(
+            _shares.Values.Where(s => s.OwnerUserId == userId && s.AlbumId == albumId).ToList());
+
+    public Task<bool> DeleteShareAsync(string userId, string code, CancellationToken ct = default) =>
+        Task.FromResult(_shares.TryGetValue(code, out var share) && share.OwnerUserId == userId && _shares.TryRemove(code, out _));
+
     public Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default)
     {
         if (!_albums.TryGetValue((userId, albumId), out var album))
@@ -150,6 +157,9 @@ internal sealed class InMemoryGalleryRepository : IGalleryRepository
         var photos = _photos.Values.Where(p => p.UserId == userId && p.AlbumId == albumId).ToList();
         foreach (var photo in photos)
             _photos.TryRemove((userId, albumId, photo.PhotoId), out _);
+
+        foreach (var share in _shares.Values.Where(s => s.OwnerUserId == userId && s.AlbumId == albumId))
+            _shares.TryRemove(share.Code, out _);
 
         return Task.FromResult<IReadOnlyList<Photo>?>(photos);
     }

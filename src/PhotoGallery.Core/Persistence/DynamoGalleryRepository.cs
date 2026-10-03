@@ -7,6 +7,7 @@ namespace PhotoGallery.Core.Persistence;
 public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOptions options) : IGalleryRepository
 {
     private const int BatchWriteLimit = 25;
+    private const string GsiAlbumShares = "GSI1";
 
     private readonly string _table = options.TableName;
 
@@ -171,7 +172,8 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         return response.Item is { Count: > 0 } item ? item : null;
     }
 
-    private async Task<List<Dictionary<string, AttributeValue>>> QueryBySkPrefixAsync(string pk, string skPrefix, CancellationToken ct)
+    private async Task<List<Dictionary<string, AttributeValue>>> QueryBySkPrefixAsync(
+        string pk, string skPrefix, CancellationToken ct, string? indexName = null)
     {
         var results = new List<Dictionary<string, AttributeValue>>();
         Dictionary<string, AttributeValue>? startkey = null;
@@ -181,7 +183,10 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
             var response = await dynamoDB.QueryAsync(new QueryRequest
             {
                 TableName = _table,
-                KeyConditionExpression = "PK = :pk AND begins_with(SK, :prefix)",
+                IndexName = indexName,
+                KeyConditionExpression = indexName is null
+                    ? "PK = :pk AND begins_with(SK, :prefix)"
+                    : "GSI1PK = :pk AND begins_with(GSI1SK, :prefix)",
                 ExpressionAttributeValues = new()
                 {
                     [":pk"] = pk.ToS(),
@@ -318,6 +323,33 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
         return item is null ? null : ItemMapper.ToShare(item);
     }
 
+    public async Task<IReadOnlyList<Share>> ListSharesAsync(string userId, string albumId, CancellationToken ct = default)
+    {
+        var items = await QueryBySkPrefixAsync(Keys.AlbumGsiPk(albumId), Keys.ShareGsiSkPrefix, ct, GsiAlbumShares);
+
+        // Album ids are unguessable, but the owner check keeps the guarantee explicit.
+        return items.Select(ItemMapper.ToShare).Where(share => share.OwnerUserId == userId).ToList();
+    }
+
+    public async Task<bool> DeleteShareAsync(string userId, string code, CancellationToken ct = default)
+    {
+        try
+        {
+            await dynamoDB.DeleteItemAsync(new DeleteItemRequest
+            {
+                TableName = _table,
+                Key = Key(Keys.SharePk(code), Keys.ShareSk),
+                ConditionExpression = "OwnerUserId = :owner",
+                ExpressionAttributeValues = new() { [":owner"] = userId.ToS() }
+            }, ct);
+            return true;
+        }
+        catch (ConditionalCheckFailedException)
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> RenameAlbumAsync(string userId, string albumId, string name, CancellationToken ct = default)
     {
         try
@@ -345,9 +377,12 @@ public sealed class DynamoGalleryRepository(IAmazonDynamoDB dynamoDB, GalleryOpt
             return null;
 
         var photos = await ListPhotosAsync(userId, albumId, ct);
+        var shares = await ListSharesAsync(userId, albumId, ct);
 
+        // Share links go with the album, otherwise they would linger as dead records until TTL.
         var keys = photos
             .Select(photo => Key(Keys.UserPk(userId), Keys.PhotoSk(albumId, photo.PhotoId)))
+            .Concat(shares.Select(share => Key(Keys.SharePk(share.Code), Keys.ShareSk)))
             .Append(Key(Keys.UserPk(userId), Keys.AlbumSk(albumId)));
 
         foreach (var chunk in keys.Chunk(BatchWriteLimit))

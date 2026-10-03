@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using PhotoGallery.Core;
+using PhotoGallery.Core.Models;
 using PhotoGallery.Core.Storage;
 
 namespace PhotoGallery.Upload;
@@ -13,10 +14,6 @@ public sealed record ValidUpload(
 
 public static class UploadRequestValidator
 {
-    private const int MaxCaptionLength = 500;
-    private const int MaxTags = 20;
-    private const int MaxTagLength = 50;
-
     public static bool TryValidate(
         UploadRequest? request,
         [NotNullWhen(true)] out ValidUpload? upload,
@@ -30,22 +27,21 @@ public static class UploadRequestValidator
             { AlbumId: var albumId } when !IdFormats.IsEntityId(albumId) => "albumId is invalid.",
             { ContentType: var ct } when !ImageContentTypes.IsAllowed(ct) =>
                 "contentType must be image/jpeg, image/png or image/webp.",
-            { Caption.Length: > MaxCaptionLength } => $"caption must be at most {MaxCaptionLength} characters.",
-            { Tags.Count: > MaxTags } => $"At most {MaxTags} tags are allowed.",
-            { Tags: { } tags } when tags.Any(t => string.IsNullOrWhiteSpace(t) || t.Length > MaxTagLength) =>
-                $"Each tag must be 1-{MaxTagLength} characters.",
             _ => null
         };
 
         if (error is not null)
             return false;
 
-        upload = new ValidUpload(
-            request!.FileName!,
-            request.ContentType!,
-            request.AlbumId!,
-            request.Caption,
-            request.Tags ?? []);
+        // Same caption/tag rules as editing a photo later in the Photos API.
+        var details = PhotoDetailsRules.Normalize(request!.Caption, request.Tags);
+        if (PhotoDetailsRules.Validate(details) is { Count: > 0 } errors)
+        {
+            error = errors.Values.First()[0];
+            return false;
+        }
+
+        upload = new ValidUpload(request.FileName!, request.ContentType!, request.AlbumId!, details.Caption, details.Tags);
         return true;
     }
 }

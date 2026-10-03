@@ -1,28 +1,22 @@
 using Amazon.Lambda.APIGatewayEvents;
 using PhotoGallery.Core;
+using PhotoGallery.Core.Auth;
 
 namespace PhotoGallery.Upload;
 
 public static class UserResolver
 {
-    public const string DebugUserHeader = "x-debug-user-id";
+    public const string DebugUserHeader = UserIdentity.DebugUserHeader;
 
     public static string? Resolve(APIGatewayHttpApiV2ProxyRequest request, GalleryOptions options)
     {
-        if (request.RequestContext?.Authorizer?.Jwt?.Claims is { } claims
-            && claims.TryGetValue("sub", out var sub))
-            return Validated(sub);
+        string? subject = null;
+        request.RequestContext?.Authorizer?.Jwt?.Claims?.TryGetValue(UserIdentity.SubjectClaim, out subject);
 
-        if (!options.UseLocalStack || request.Headers is null)
-            return null;
-
-        var debugUser = request.Headers
+        var debugUser = request.Headers?
             .FirstOrDefault(h => string.Equals(h.Key, DebugUserHeader, StringComparison.OrdinalIgnoreCase))
             .Value;
 
-        return Validated(debugUser);
+        return UserIdentity.Resolve(subject, debugUser, options);
     }
-
-    private static string? Validated(string? userId) =>
-        IdFormats.IsUserId(userId) ? userId : null;
 }

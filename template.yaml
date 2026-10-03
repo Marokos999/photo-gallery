@@ -43,6 +43,8 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: ExpiresAt
         Enabled: true
+      StreamSpecification:
+        StreamViewType: OLD_IMAGE
       AttributeDefinitions:
         - { AttributeName: PK, AttributeType: S }
         - { AttributeName: SK, AttributeType: S }
@@ -106,6 +108,27 @@ Resources:
               S3Key:
                 Rules:
                   - { Name: prefix, Value: originals/ }
+
+  ExpiredUploadCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/PhotoGallery.Processing/
+      Handler: PhotoGallery.Processing::PhotoGallery.Processing.ExpiredUploadCleanupFunction::HandleAsync
+      MemorySize: 256
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Sub "${AWS::StackName}-photos-${AWS::AccountId}"
+      Events:
+        PendingUploadExpired:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt PhotoTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 25
+            # Only TTL deletions reach the function (user deletes are cleaned up by the API).
+            FilterCriteria:
+              Filters:
+                - Pattern: eventName:[REMOVE]
 
   PhotosFunction:
     Type: AWS::Serverless::Function

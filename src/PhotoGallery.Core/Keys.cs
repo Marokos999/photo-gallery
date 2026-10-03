@@ -19,7 +19,9 @@ public static class Keys
 
     public static string AlbumGsiPk(string albumId) => $"ALBUM#{albumId}";
 
-    public static string PhotoGsiSk(string photoId) => $"{PhotoSkPrefix}{photoId}";
+    public const string ShareGsiSkPrefix = "SHARE#";
+
+    public static string ShareGsiSk(string code) => $"{ShareGsiSkPrefix}{code}";
 
     public static string NewId() => NewId(DateTimeOffset.UtcNow);
 

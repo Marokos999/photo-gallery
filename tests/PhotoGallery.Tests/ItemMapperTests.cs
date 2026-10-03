@@ -53,16 +53,27 @@ public class ItemMapperTests
     }
 
     [Fact]
-    public void Photo_HasAlbumGsiKeys()
+    public void Photo_IsNotProjectedIntoGsi1()
     {
         var photo = new Photo { UserId = "u1", AlbumId = "a1", PhotoId = "p1", OriginalKey = "k", CreatedAt = Now };
 
         var item = ItemMapper.ToItem(photo);
 
         Assert.Equal("PHOTO#a1#p1", item["SK"].S);
-        Assert.Equal("ALBUM#a1", item["GSI1PK"].S);
-        Assert.Equal("PHOTO#p1", item["GSI1SK"].S);
+        Assert.False(item.ContainsKey("GSI1PK"));
     }
+
+    [Fact]
+    public void Share_IsIndexedByAlbumInGsi1()
+    {
+        var share = new Share { Code = "abc", OwnerUserId = "u1", AlbumId = "a1", CreatedAt = Now };
+
+        var item = ItemMapper.ToItem(share);
+
+        Assert.Equal("ALBUM#a1", item["GSI1PK"].S);
+        Assert.Equal("SHARE#abc", item["GSI1SK"].S);
+    }
+
     [Fact]
     public void PendingPhoto_ExpiresAfter24Hours()
     {

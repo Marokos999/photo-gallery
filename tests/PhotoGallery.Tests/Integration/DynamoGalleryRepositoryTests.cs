@@ -253,4 +253,36 @@ public class DynamoGalleryRepositoryTests
 
         Assert.Equal(Enumerable.Reverse(created), received);
     }
+
+    [Fact]
+    public async Task Shares_AreListedPerAlbum_RevocableByOwnerOnly_AndDeletedWithAlbum()
+    {
+        Assert.SkipUnless(LocalStack.IsRunning, SkipReason);
+        var album = NewAlbum("Shared");
+        await _repository.CreateAlbumAsync(album, Ct);
+        var first = NewShare(album.AlbumId);
+        var second = NewShare(album.AlbumId);
+        await _repository.CreateShareAsync(first, Ct);
+        await _repository.CreateShareAsync(second, Ct);
+
+        var listed = await _repository.ListSharesAsync(_userId, album.AlbumId, Ct);
+        Assert.Equal(2, listed.Count);
+        Assert.Empty(await _repository.ListSharesAsync(Keys.NewId(), album.AlbumId, Ct));
+
+        Assert.False(await _repository.DeleteShareAsync(Keys.NewId(), first.Code, Ct));
+        Assert.True(await _repository.DeleteShareAsync(_userId, first.Code, Ct));
+        Assert.Null(await _repository.GetShareAsync(first.Code, Ct));
+
+        await _repository.DeleteAlbumAsync(_userId, album.AlbumId, Ct);
+        Assert.Null(await _repository.GetShareAsync(second.Code, Ct));
+    }
+
+    private Share NewShare(string albumId) => new()
+    {
+        Code = Keys.NewShareCode(),
+        OwnerUserId = _userId,
+        AlbumId = albumId,
+        CreatedAt = DateTimeOffset.UtcNow,
+        ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+    };
 }
